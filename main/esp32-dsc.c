@@ -30,7 +30,7 @@ void app_main()
 
     keybus_init();
     printf("Starting KeyBus Task...");
-    xTaskCreate(&keybus_task, "keybus_task", configMINIMAL_STACK_SIZE, NULL, 5, NULL);
+    xTaskCreatePinnedToCore(&keybus_task, "keybus_task_app_cpu", 8192, NULL, 10, NULL, 1); // App CPU, Priority 10
     printf("Done\n");
     fflush(stdout);
 }

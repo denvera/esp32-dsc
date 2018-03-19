@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "driver/gpio.h"
@@ -11,7 +12,8 @@
 #include "keybus.h"
 
 char panel_msg[128], periph_msg[128];
-char bit_count = 0;
+short bit_count = 0;
+short byte_index = 0;
 char last_clk = 0;
 bool in_msg = false;
 
@@ -19,7 +21,8 @@ xQueueHandle msg_queue;
 
 typedef struct {
     char msg[KEYBUS_MSG_SIZE];
-    short len;
+    short len_bits;
+    short len_bytes;
     uint64_t timer_counter_value;
 } keybus_msg_t;
 
@@ -47,15 +50,20 @@ void keybus_task(void *pvParameter) {
       xQueueReceive(msg_queue, &msg, portMAX_DELAY);
       led ^= 1;
       gpio_set_level(LED_GPIO, led);
-      printf("Received msg: %lld Len: %d\n", msg.timer_counter_value, msg.len);
-      print_timer_counter(msg.timer_counter_value);
-      printf("Task values\n");
+      printf("%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+      //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
+      for (int i = 0; i < msg.len_bytes; i++) printf("%x ", msg.msg[i]);
+      printf("\n");
+      //print_timer_counter(msg.timer_counter_value);
+      //printf("Task values\n");
       uint64_t task_counter_value;
       timer_get_counter_value(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX, &task_counter_value);
-      print_timer_counter(task_counter_value);
-      bit_count = 0;
+      //print_timer_counter(task_counter_value);
+      //bit_count = 0;
       keybus_reset_timer();
-      in_msg = false;
+      memset(panel_msg, 0, 128);
+      memset(periph_msg, 0, 128);
+      //in_msg = false;
       //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
   }
 }
@@ -63,6 +71,7 @@ void keybus_task(void *pvParameter) {
 static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
 {
     if (!in_msg) {
+      byte_index = 0;
       in_msg = true;
       uint32_t gpio_num = (uint32_t) arg;
       TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
@@ -75,18 +84,26 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
 
 void IRAM_ATTR keybus_timer_isr(void *p) {
   // Read a bit
-  bit_count++;
-  char clock;
+
+  char clock, data;
   uint32_t intr_status = TIMERG0.int_st_timers.val;
   TIMERG0.hw_timer[KEYBUS_TIMER_IDX].update = 1;
   uint64_t timer_counter_value =
         ((uint64_t) TIMERG0.hw_timer[KEYBUS_TIMER_IDX].cnt_high) << 32
         | TIMERG0.hw_timer[KEYBUS_TIMER_IDX].cnt_low;
-  // Clear interrupt
-  TIMERG0.int_clr_timers.t0 = 1;
-  clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
+
   if (intr_status & BIT(KEYBUS_TIMER_IDX)) {
+    clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
+    data = ((GPIO.in >> KEYBUS_DATA) & 0x1);
+    if (clock) {
+      bit_count++;
+      panel_msg[byte_index] = (panel_msg[byte_index] << 1) | data;
+      if (((bit_count == 8) || ((bit_count == 9)) || ((bit_count > 9) && ((bit_count-9) % 8 == 0))) && (byte_index <= KEYBUS_MSG_SIZE))  byte_index++;
+    }
+    // Clear interrupt
+    TIMERG0.int_clr_timers.t0 = 1;
     if (bit_count == 1) {
+      //byte_index = 0;
       TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
       TIMERG0.int_clr_timers.t0 = 1;
       //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) (KEYBUS_BIT_TIME >> 32);
@@ -98,19 +115,24 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       keybus_msg_t msg;
       TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
       msg.timer_counter_value = timer_counter_value;
-      msg.len = bit_count;
-      // for (int i = 0; i < KEYBUS_MSG_SIZE; i++)
-      //   msg.msg[i] = panel_msg[i];
+      msg.len_bits = bit_count;
+      msg.len_bytes = byte_index + 1;
+      for (int i = 0; i <= byte_index; i++)
+         msg.msg[i] = panel_msg[i];
       if (bit_count >= 32) {
         xQueueSendFromISR(msg_queue, &msg, NULL);
       } else {
         in_msg = false;
         bit_count = 0;
+        byte_index = 0;
       }
+      in_msg = false;
+      bit_count = 0;
+      byte_index = 0;
     }
     TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
+    last_clk = clock;
   }
-  last_clk = clock;
 }
 
 void keybus_start_msg() {
@@ -126,7 +148,7 @@ void keybus_reset_timer() { // Zero timer
 
 void keybus_setup_gpio() {
    gpio_config_t io_conf;
-   io_conf.intr_type = GPIO_INTR_ANYEDGE;
+   io_conf.intr_type = GPIO_INTR_DISABLE;
    //set as output mode
    io_conf.mode = GPIO_MODE_INPUT;
    io_conf.pin_bit_mask = (1 << KEYBUS_DATA | 1 << KEYBUS_CLOCK);
@@ -136,6 +158,7 @@ void keybus_setup_gpio() {
    io_conf.pull_up_en = 1;
    //configure GPIO with the given settings
    gpio_config(&io_conf);
+   gpio_set_intr_type(KEYBUS_CLOCK, GPIO_INTR_POSEDGE);
    gpio_install_isr_service(ESP_INTR_FLAG_DEFAULT);
    gpio_isr_handler_add(KEYBUS_CLOCK, keybus_clock_isr_handler, (void*) KEYBUS_CLOCK);
 }
