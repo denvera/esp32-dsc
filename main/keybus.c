@@ -21,6 +21,7 @@ xQueueHandle msg_queue;
 
 typedef struct {
     char msg[KEYBUS_MSG_SIZE];
+    char pmsg[KEYBUS_MSG_SIZE];
     short len_bits;
     short len_bytes;
     uint64_t timer_counter_value;
@@ -95,10 +96,13 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
   if (intr_status & BIT(KEYBUS_TIMER_IDX)) {
     clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
     data = ((GPIO.in >> KEYBUS_DATA) & 0x1);
-    if (clock) {
+    if (clock && ((last_clk == 0) || (bit_count == 0))) { // Panel to periphs
       bit_count++;
       panel_msg[byte_index] = (panel_msg[byte_index] << 1) | data;
+      //panel_msg[byte_index] |= data;
       if (((bit_count == 8) || ((bit_count == 9)) || ((bit_count > 9) && ((bit_count-9) % 8 == 0))) && (byte_index <= KEYBUS_MSG_SIZE))  byte_index++;
+    } else { // Periphs to panel
+      periph_msg[byte_index] = (periph_msg[byte_index] << 1) | data;
     }
     // Clear interrupt
     TIMERG0.int_clr_timers.t0 = 1;
@@ -119,6 +123,7 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       msg.len_bytes = byte_index + 1;
       for (int i = 0; i <= byte_index; i++)
          msg.msg[i] = panel_msg[i];
+      memcpy(msg.pmsg, periph_msg, byte_index);
       if (bit_count >= 32) {
         xQueueSendFromISR(msg_queue, &msg, NULL);
       } else {
@@ -132,6 +137,7 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
     }
     TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
     last_clk = clock;
+    //if (clock) panel_msg[byte_index] <<= 1;
   }
 }
 
@@ -185,4 +191,13 @@ void keybus_setup_timer() {
       (void *) KEYBUS_TIMER_IDX, ESP_INTR_FLAG_IRAM, NULL);
 
   // /timer_start(TIMER_GROUP_0, timer_idx);
+}
+
+int keybus_check_crc(char *msg, char len) {
+  switch (msg[1]) {
+      case 0x05:
+        return -1;
+      default:
+        return 0;
+  }
 }
