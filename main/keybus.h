@@ -23,5 +23,6 @@ void keybus_start_msg();
 void keybus_setup_gpio();
 void keybus_task(void *pvParameter);
 void keybus_setup_timer();
+int keybus_check_crc(char *msg, char len);
 
 void IRAM_ATTR keybus_timer_isr(void *p);

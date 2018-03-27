@@ -11,7 +11,7 @@
 #include "config.h"
 #include "keybus.h"
 
-char panel_msg[128], periph_msg[128];
+char panel_msg[128], periph_msg[128], last_msg[128];
 short bit_count = 0;
 short byte_index = 0;
 char last_clk = 0;
@@ -38,6 +38,7 @@ void keybus_init() {
   msg_queue = xQueueCreate(32, sizeof(keybus_msg_t));
   keybus_setup_timer();
   keybus_setup_gpio();
+  memset(last_msg, 0, 128);
   //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
 }
 
@@ -51,10 +52,13 @@ void keybus_task(void *pvParameter) {
       xQueueReceive(msg_queue, &msg, portMAX_DELAY);
       led ^= 1;
       gpio_set_level(LED_GPIO, led);
-      printf("%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
       //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
-      for (int i = 0; i < msg.len_bytes; i++) printf("%x ", msg.msg[i]);
-      printf("\n");
+      if (memcmp(msg.msg, last_msg, msg.len_bytes) != 0) {
+        printf("%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+        for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.msg[i]);
+        printf("\t%s\n", (keybus_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+        memcpy(last_msg, msg.msg, msg.len_bytes);
+      }
       //print_timer_counter(msg.timer_counter_value);
       //printf("Task values\n");
       uint64_t task_counter_value;
@@ -74,7 +78,7 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
     if (!in_msg) {
       byte_index = 0;
       in_msg = true;
-      uint32_t gpio_num = (uint32_t) arg;
+      //uint32_t gpio_num = (uint32_t) arg;
       TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
       TIMERG0.int_clr_timers.t0 = 1;
       TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
@@ -121,9 +125,10 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       msg.timer_counter_value = timer_counter_value;
       msg.len_bits = bit_count;
       msg.len_bytes = byte_index + 1;
-      for (int i = 0; i <= byte_index; i++)
-         msg.msg[i] = panel_msg[i];
-      memcpy(msg.pmsg, periph_msg, byte_index);
+      //for (int i = 0; i <= byte_index; i++)
+      //   msg.msg[i] = panel_msg[i];
+      memcpy(msg.msg, panel_msg, byte_index+1);
+        memcpy(msg.pmsg, periph_msg, byte_index+1);
       if (bit_count >= 32) {
         xQueueSendFromISR(msg_queue, &msg, NULL);
       } else {
@@ -192,12 +197,17 @@ void keybus_setup_timer() {
 
   // /timer_start(TIMER_GROUP_0, timer_idx);
 }
-
+// 0 if ok, 1 crc error, -1 no crc
 int keybus_check_crc(char *msg, char len) {
-  switch (msg[1]) {
+  int bytes = len-2;
+  int crc = msg[len-2];
+  switch (msg[0]) {
       case 0x05:
+      case 0x11:
         return -1;
       default:
-        return 0;
+        while (bytes--)
+          crc -= msg[bytes];
+        return crc & 0xff;
   }
 }
