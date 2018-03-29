@@ -1,0 +1,8 @@
+menu "DSC KeyBus Max Message Size"
+
+config KEYBUS_MSG_SIZE
+    int "Max KeyBus MSG Size in bytes"
+    default 128
+    help
+        Max KeyBus message size in bytes
+endmenu
