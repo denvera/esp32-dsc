@@ -8,10 +8,17 @@
 #include "argtable3/argtable3.h"
 
 #include "dsc_console.h"
+#include "keybus_handler.h"
 
 static void register_monitor();
 static void register_write();
 static int monitor_mode(int argc, char** argv);
+static int write(int argc, char** argv);
+
+static struct {
+    struct arg_int *write_str;
+    struct arg_end *end;
+} write_args;
 
 void console_task(void *pvParameter) {
   esp_console_register_help_command();
@@ -54,14 +61,33 @@ static void register_monitor() {
 }
 
 static int monitor_mode(int argc, char** argv) {
-  printf("monit0r mode...\n");
+  toggle_monitor_mode();
   return 0;
 }
 
 static void register_write() {
-
+  const esp_console_cmd_t cmd = {
+        .command = "write",
+        .help = "Write to KeyBus",
+        .hint = NULL,
+        .func = &write,
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
+static int write(int argc, char** argv)
+{
+  int k;
+  char c;
+  for (int i = 1; i < argc; i++) {
+    if (sscanf(argv[i], "%i", &k) > 0) {
+      printf("Writing %02X\n", k);
+      c = k & 0xff;
+      xQueueSendFromISR(write_queue, &c, NULL);
+    }
+  }
+  return 0;
+}
 
 void initialize_console()
 {
@@ -110,4 +136,5 @@ void initialize_console()
 #endif
 
   register_monitor();
+  register_write();
 }

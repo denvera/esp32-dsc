@@ -9,6 +9,7 @@
 #include "keybus_handler.h"
 
 char last_msg[128];
+static bool monitor_mode = false;
 
 void keybus_handler_task(void *pvParameter) {
   gpio_pad_select_gpio(LED_GPIO);
@@ -22,9 +23,11 @@ void keybus_handler_task(void *pvParameter) {
       gpio_set_level(LED_GPIO, led);
       //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
       if (memcmp(msg.msg, last_msg, msg.len_bytes) != 0) {
-        printf("%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
-        for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.msg[i]);
-        printf("\t%s\n", (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+        if (monitor_mode) {
+          printf("\n%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.msg[i]);
+          printf("\t%s", (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+        }
         memcpy(last_msg, msg.msg, msg.len_bytes);
       }
       //in_msg = false;
@@ -32,6 +35,10 @@ void keybus_handler_task(void *pvParameter) {
   }
 }
 
+void toggle_monitor_mode() {
+  printf("Monitor mode %s\n", (monitor_mode == false) ? "on" : "off");
+  monitor_mode = (monitor_mode) ? false : true;
+}
 
 // 0 if ok, 1 crc error, -1 no crc
 int keybus_handler_check_crc(char *msg, char len) {

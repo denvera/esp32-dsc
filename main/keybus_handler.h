@@ -16,3 +16,4 @@ xQueueHandle msg_queue, write_queue;
 
 void keybus_handler_task(void *pvParameter);
 int keybus_handler_check_crc(char *msg, char len);
+void toggle_monitor_mode();
