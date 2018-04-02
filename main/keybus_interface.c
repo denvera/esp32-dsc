@@ -8,6 +8,9 @@
 
 #include "driver/timer.h"
 
+#include "xtensa/core-macros.h"
+
+
 #include "config.h"
 #include "keybus_interface.h"
 #include "keybus_handler.h"
@@ -31,7 +34,7 @@ static void inline print_timer_counter(uint64_t counter_value)
 void keybus_init() {
   msg_queue = xQueueCreate(32, sizeof(keybus_msg_t));
   write_queue = xQueueCreate(32, sizeof(char));
-  BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, (configMAX_PRIORITIES-5), &keybus_write_task_handle, 1); // App CPU, Priority 10
+  BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, (configMAX_PRIORITIES-1), &keybus_write_task_handle, 1); // App CPU, Priority 10
   keybus_setup_timer();
   keybus_setup_gpio();
   //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
@@ -39,76 +42,73 @@ void keybus_init() {
 
 static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
 {
+    uint32_t gpio_num = (uint32_t) arg;
     // check queue, read byte into static, write with bitcount
-    if (!in_msg && ((GPIO.in >> KEYBUS_CLOCK) & 0x1)) {
-      byte_index = 0;
-      in_msg = true;
-      //uint32_t gpio_num = (uint32_t) arg;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-      TIMERG0.int_clr_timers.t0 = 1;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_START_OFFSET;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
-    }
-     xTaskNotifyFromISR(keybus_write_task_handle, 0x00, eNoAction, NULL);
+    char clock = (GPIO.in >> KEYBUS_CLOCK) & 0x1;
+    if (gpio_num == KEYBUS_CLOCK) {
 
+      xTaskNotifyFromISR(keybus_write_task_handle, 0x00, eNoAction, NULL);
+      if (!in_msg && clock) {
+        byte_index = 0;
+        in_msg = true;
+        //uint32_t gpio_num = (uint32_t) arg;
+        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+        TIMERG0.int_clr_timers.t0 = 1;
+        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
+        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_START_OFFSET;
+        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
+      }
+      //if (!clock)
+  }
 }
 
 void keybus_write_task(void *pvParameter) {
   uint32_t ulInterruptStatus;
   static char write_byte;
-  static bool writing = false;
-
+  static bool writing;
+  static int write_index = 0;
+  uint32_t ccount = XTHAL_GET_CCOUNT();
   char clock;
   for( ;; ) {
     xTaskNotifyWait(0x00, ULONG_MAX, &ulInterruptStatus, portMAX_DELAY );
+    if ((XTHAL_GET_CCOUNT() - ccount) < 100000) {
+      continue;
+    }
+    ccount = XTHAL_GET_CCOUNT();
     clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
-    if (bit_count == 0) {
+    if (bit_count == 0 && !writing) {
       if (xQueueReceive(write_queue, &write_byte, 0) == pdTRUE) {
         writing = true;
         printf("Writing now %d\n", write_byte);
+        write_index = -9;
       }
     }
-    if (writing && bit_count == 8)  {
-      PIN_INPUT_DISABLE(GPIO_PIN_MUX_REG[KEYBUS_DATA]);
-      if (KEYBUS_DATA < 32) {
-        GPIO.enable_w1ts = (0x1 << KEYBUS_DATA);
-      } else {
-        GPIO.enable1_w1ts.data = (0x1 << (KEYBUS_DATA - 32));
-      }
-      GPIO.pin[KEYBUS_DATA].pad_driver = 1;
-      gpio_matrix_out(KEYBUS_DATA, SIG_GPIO_OUT_IDX, false, false);
-    }
+    // if (writing && write_index == 0 && (clock == 0)) { //} bit_count == 8)  {
+    //   gpio_set_direction(KEYBUS_DATA, GPIO_MODE_OUTPUT);
+    // }
     if (clock == 0) {
-      if (writing && (bit_count >= 9) && (bit_count <= 16)) { // Write
-        if ((write_byte >> (bit_count-8)) & 0x01) {
-          if (KEYBUS_DATA < 32) {
-              GPIO.out_w1ts = (1 << KEYBUS_DATA);
-          } else {
-              GPIO.out1_w1ts.data = (1 << (KEYBUS_DATA - 32));
-          }
+      if (writing && (write_index >= 0) && (write_index < 8)) { // Write
+        //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+        //TIMERG0.int_clr_timers.t0 = 1;
+
+        gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT_OUTPUT);
+        if ((write_byte >> (7-write_index)) & 0x01) {
+          gpio_set_level(KEYBUS_DATA, 1);
         } else {
-          if (KEYBUS_DATA < 32) {
-            GPIO.out_w1tc = (0x1 << KEYBUS_DATA);
-          } else {
-            GPIO.out1_w1tc.data = (0x1 << (KEYBUS_DATA - 32));
-          }
+          gpio_set_level(KEYBUS_DATA, 0);
         }
-        //printf("WRITE A BIT!@#\n");
+        //printf("WRITE BIT %d INDEX %d BIT_COUNT %d\n", ((write_byte >> (7-write_index)) & 0x01), write_index, bit_count);
       }
+      write_index++;
+    } else {
+      gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT);
     }
-    if (writing && bit_count > 16) {
+    if (writing && (write_index > 8) && (clock == 0)) {
       writing = false;
-      GPIO.pin[KEYBUS_DATA].pad_driver = 0;
-      PIN_INPUT_ENABLE(GPIO_PIN_MUX_REG[KEYBUS_DATA]);
-      if (KEYBUS_DATA < 32) {
-          GPIO.enable_w1tc = (0x1 << KEYBUS_DATA);
-      } else {
-          GPIO.enable1_w1tc.data = (0x1 << (KEYBUS_DATA - 32));
-      }
-      REG_WRITE(GPIO_FUNC0_OUT_SEL_CFG_REG + (KEYBUS_DATA * 4),
-              SIG_GPIO_OUT_IDX);
+      gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT);
       printf("Write done\n");
+      write_index = 0;
+      //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
     }
   }
 }
@@ -154,7 +154,7 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       //for (int i = 0; i <= byte_index; i++)
       //   msg.msg[i] = panel_msg[i];
       memcpy(msg.msg, panel_msg, byte_index+1);
-        memcpy(msg.pmsg, periph_msg, byte_index+1);
+      memcpy(msg.pmsg, periph_msg, byte_index+1);
       if (bit_count >= 32) {
         xQueueSendFromISR(msg_queue, &msg, NULL);
       } else {
@@ -194,7 +194,7 @@ void keybus_setup_gpio() {
    //disable pull-down mode
    io_conf.pull_down_en = 0;
    //disable pull-up mode
-   io_conf.pull_up_en = 1;
+   io_conf.pull_up_en = 0;
    //configure GPIO with the given settings
    gpio_config(&io_conf);
    gpio_set_intr_type(KEYBUS_CLOCK, GPIO_INTR_ANYEDGE);

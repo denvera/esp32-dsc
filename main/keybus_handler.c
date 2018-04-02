@@ -8,7 +8,7 @@
 
 #include "keybus_handler.h"
 
-char last_msg[128];
+char last_msg[128], last_periph_msg[128];
 static bool monitor_mode = false;
 
 void keybus_handler_task(void *pvParameter) {
@@ -16,6 +16,8 @@ void keybus_handler_task(void *pvParameter) {
 /* Set the GPIO as a push/pull output */
   gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
   unsigned char led = 0;
+  memset(last_msg, 0, 128);
+  memset(last_periph_msg, 0, 128);
   while(1) {
       keybus_msg_t msg;
       xQueueReceive(msg_queue, &msg, portMAX_DELAY);
@@ -30,6 +32,15 @@ void keybus_handler_task(void *pvParameter) {
         }
         memcpy(last_msg, msg.msg, msg.len_bytes);
       }
+      if (memcmp(msg.pmsg, last_periph_msg, msg.len_bytes) != 0) {
+        if (monitor_mode) {
+          printf("\nPeripheral: %lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.pmsg[i]);
+          printf("\t%s", (keybus_handler_check_crc(msg.pmsg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+        }
+        memcpy(last_periph_msg, msg.pmsg, msg.len_bytes);
+      }
+
       //in_msg = false;
       //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
   }
