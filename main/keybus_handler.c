@@ -9,6 +9,7 @@
 #include "keybus_handler.h"
 
 char last_msg[128], last_periph_msg[128];
+char formatted_msg[128];
 static bool monitor_mode = false;
 
 void keybus_handler_task(void *pvParameter) {
@@ -18,6 +19,7 @@ void keybus_handler_task(void *pvParameter) {
   unsigned char led = 0;
   memset(last_msg, 0, 128);
   memset(last_periph_msg, 0, 128);
+  memset(formatted_msg, 0, 128);
   while(1) {
       keybus_msg_t msg;
       xQueueReceive(msg_queue, &msg, portMAX_DELAY);
@@ -26,18 +28,23 @@ void keybus_handler_task(void *pvParameter) {
       //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
       if (memcmp(msg.msg, last_msg, msg.len_bytes) != 0) {
         if (monitor_mode) {
-          printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Panel: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
-          for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.msg[i]);
-          printf("\t%s", (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+          //printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Panel: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          for (int i = 0; i < msg.len_bytes; i++)
+            snprintf(formatted_msg+(i*3), 4, "%02X ", msg.msg[i]);
+          printf("\n%-10s Bits: %d Bytes: %d\t%-48s\t%s", "Panel: ", msg.len_bits, msg.len_bytes, formatted_msg, (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+          //printf("\t%s", (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
         }
         memcpy(last_msg, msg.msg, msg.len_bytes);
       }
       if (periph_msg_present(msg.pmsg, msg.len_bytes)) {
         if (monitor_mode) {
-          printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Periph: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
-          for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.pmsg[i]);
-          const char * key_check = (msg.msg[0] == 0x11) ? "[||]" : "[BAD]";
-          printf("\t%s", (keybus_key_crc_ok(msg.pmsg[2]) ? "[OK]" : key_check));
+          //printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Periph: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          //for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.pmsg[i]);
+          for (int i = 0; i < msg.len_bytes; i++)
+            snprintf(formatted_msg+(i*3), 4, "%02X ", msg.pmsg[i]);
+          const char * key_check = (msg.msg[0] == 0x11) ? "||]" : "BAD]";
+          printf("\n%-10s Bits: %d Bytes: %d\t%-48s\t[%02X - %s", "Periph: ", msg.len_bits, msg.len_bytes, formatted_msg, (msg.pmsg[2] >> 2), (keybus_key_crc_ok(msg.pmsg[2]) ? "OK]" : key_check));
+          //printf("\t%s", (keybus_key_crc_ok(msg.pmsg[2]) ? "[OK]" : key_check));
         }
         memcpy(last_periph_msg, msg.pmsg, msg.len_bytes);
       }
