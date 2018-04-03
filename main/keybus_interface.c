@@ -65,7 +65,7 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
 void keybus_write_task(void *pvParameter) {
   uint32_t ulInterruptStatus;
   static char write_byte;
-  static bool writing;
+  static bool writing = false;
   static int write_index = 0;
   uint32_t ccount = XTHAL_GET_CCOUNT();
   char clock;
@@ -76,11 +76,15 @@ void keybus_write_task(void *pvParameter) {
     }
     ccount = XTHAL_GET_CCOUNT();
     clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
-    if (bit_count == 0 && !writing) {
-      if (xQueueReceive(write_queue, &write_byte, 0) == pdTRUE) {
-        writing = true;
-        printf("Writing now %d\n", write_byte);
-        write_index = -9;
+    if (bit_count == 0) {
+      if (!writing) {
+        if (xQueueReceive(write_queue, &write_byte, 0) == pdTRUE) {
+          writing = true;
+          //printf("Writing now %d\n", write_byte);
+          write_index = -8;
+        }
+      } else {
+        write_index = -8;
       }
     }
     // if (writing && write_index == 0 && (clock == 0)) { //} bit_count == 8)  {
@@ -88,6 +92,9 @@ void keybus_write_task(void *pvParameter) {
     // }
     if (clock == 0) {
       if (writing && (write_index >= 0) && (write_index < 8)) { // Write
+         if (panel_msg[0] != 0x05) { // Only write on 0x05 messages
+           continue;
+         }
         //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
         //TIMERG0.int_clr_timers.t0 = 1;
 
