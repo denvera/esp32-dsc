@@ -12,8 +12,11 @@
 
 static void register_monitor();
 static void register_write();
+static void register_reset();
+
 static int monitor_mode(int argc, char** argv);
 static int write(int argc, char** argv);
+static int reset(int argc, char** argv);
 
 static struct {
     struct arg_int *write_str;
@@ -89,6 +92,20 @@ static int write(int argc, char** argv)
   return 0;
 }
 
+static void register_reset() {
+  const esp_console_cmd_t cmd = {
+        .command = "reset",
+        .help = "Reboot ESP32 module",
+        .hint = NULL,
+        .func = &reset,
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+
+static int reset(int argc, char** argv) {
+   esp_restart();
+}
+
 void initialize_console()
 {
     /* Disable buffering on stdin and stdout */
@@ -137,4 +154,5 @@ void initialize_console()
 
   register_monitor();
   register_write();
+  register_reset();
 }

@@ -26,17 +26,18 @@ void keybus_handler_task(void *pvParameter) {
       //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
       if (memcmp(msg.msg, last_msg, msg.len_bytes) != 0) {
         if (monitor_mode) {
-          printf("\n%lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Panel: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
           for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.msg[i]);
           printf("\t%s", (keybus_handler_check_crc(msg.msg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
         }
         memcpy(last_msg, msg.msg, msg.len_bytes);
       }
-      if (memcmp(msg.pmsg, last_periph_msg, msg.len_bytes) != 0) {
+      if (periph_msg_present(msg.pmsg, msg.len_bytes)) {
         if (monitor_mode) {
-          printf("\nPeripheral: %lld Bits: %d Bytes: %d\t\t", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
+          printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Periph: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
           for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.pmsg[i]);
-          printf("\t%s", (keybus_handler_check_crc(msg.pmsg, msg.len_bytes) <= 0) ? "[OK]" : "[BAD]");
+          const char * key_check = (msg.msg[0] == 0x11) ? "[||]" : "[BAD]";
+          printf("\t%s", (keybus_key_crc_ok(msg.pmsg[2]) ? "[OK]" : key_check));
         }
         memcpy(last_periph_msg, msg.pmsg, msg.len_bytes);
       }
@@ -49,6 +50,18 @@ void keybus_handler_task(void *pvParameter) {
 void toggle_monitor_mode() {
   printf("Monitor mode %s\n", (monitor_mode == false) ? "on" : "off");
   monitor_mode = (monitor_mode) ? false : true;
+}
+
+bool periph_msg_present(char periph_msg[], int len) {
+  if (len < 3) return false;
+  for (int i = 2; i < len-1; i++) {
+    if (periph_msg[i] != 0xff) return true;
+  }
+  return false;
+}
+
+bool keybus_key_crc_ok(char k) {
+  return ((((k >> 6) & 0x03) + ((k >> 4) & 0x03) + ((k >> 2) & 0x03)) & 0x03) == (k & 0x03);
 }
 
 // 0 if ok, 1 crc error, -1 no crc
