@@ -5,8 +5,8 @@
 #include "driver/gpio.h"
 #include "freertos/queue.h"
 #include "sdkconfig.h"
-
 #include "driver/timer.h"
+#include "esp_log.h"
 
 #include "xtensa/core-macros.h"
 
@@ -14,6 +14,8 @@
 #include "config.h"
 #include "keybus_interface.h"
 #include "keybus_handler.h"
+
+static const char* TAG = "keybus_interface";
 
 char panel_msg[128], periph_msg[128];
 short bit_count = 0;
@@ -31,12 +33,24 @@ static void inline print_timer_counter(uint64_t counter_value)
     printf("Time   : %.8f s\n", (double) counter_value / KEYBUS_TIMER_SCALE);
 }
 
+void setup_gpio_timers(void *pvParameter) {
+  keybus_setup_timer();
+  keybus_setup_gpio();
+  vTaskDelete( NULL );
+}
+
 void keybus_init() {
   msg_queue = xQueueCreate(32, sizeof(keybus_msg_t));
   write_queue = xQueueCreate(32, sizeof(char));
-  BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, (configMAX_PRIORITIES-1), &keybus_write_task_handle, 1); // App CPU, Priority 10
-  keybus_setup_timer();
-  keybus_setup_gpio();
+  BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, (configMAX_PRIORITIES-1), &keybus_write_task_handle, 0); // App CPU, Priority 10
+  if( task_ret != pdPASS ) {
+    ESP_LOGE(TAG, "Couldn't create keybus_write_task!");
+  }
+  xTaskCreatePinnedToCore(&setup_gpio_timers, "setup_gpio_timers", 8192, NULL, (configMAX_PRIORITIES-1), NULL, 1); // App CPU, Priority 10
+  // Below started in keybus_write_task to ensure ISRs sit on Core 1 (App)
+  // keybus_setup_timer();
+  // keybus_setup_gpio();
+  //setup_gpio_timers(NULL);
   //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
 }
 
@@ -52,11 +66,11 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
         byte_index = 0;
         in_msg = true;
         //uint32_t gpio_num = (uint32_t) arg;
-        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-        TIMERG0.int_clr_timers.t0 = 1;
-        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
-        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_START_OFFSET;
-        TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
+        TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+        TIMERG1.int_clr_timers.t0 = 1;
+        TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
+        TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_START_OFFSET;
+        TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
       }
       //if (!clock)
   }
@@ -69,6 +83,10 @@ void keybus_write_task(void *pvParameter) {
   static int write_index = 0;
   uint32_t ccount = XTHAL_GET_CCOUNT();
   char clock;
+
+   //keybus_setup_timer();
+   //keybus_setup_gpio();
+
   for( ;; ) {
     xTaskNotifyWait(0x00, ULONG_MAX, &ulInterruptStatus, portMAX_DELAY );
     if ((XTHAL_GET_CCOUNT() - ccount) < 100000) {
@@ -95,8 +113,8 @@ void keybus_write_task(void *pvParameter) {
          if (panel_msg[0] != 0x05) { // Only write on 0x05 messages
            continue;
          }
-        //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-        //TIMERG0.int_clr_timers.t0 = 1;
+        //TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+        //TIMERG1.int_clr_timers.t0 = 1;
 
         gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT_OUTPUT);
         if ((write_byte >> (7-write_index)) & 0x01) {
@@ -115,7 +133,7 @@ void keybus_write_task(void *pvParameter) {
       gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT);
       printf("Write done\n");
       write_index = 0;
-      //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
+      //TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
     }
   }
 }
@@ -124,11 +142,11 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
   // Read a bit
 
   char clock, data;
-  uint32_t intr_status = TIMERG0.int_st_timers.val;
-  TIMERG0.hw_timer[KEYBUS_TIMER_IDX].update = 1;
+  uint32_t intr_status = TIMERG1.int_st_timers.val;
+  TIMERG1.hw_timer[KEYBUS_TIMER_IDX].update = 1;
   uint64_t timer_counter_value =
-        ((uint64_t) TIMERG0.hw_timer[KEYBUS_TIMER_IDX].cnt_high) << 32
-        | TIMERG0.hw_timer[KEYBUS_TIMER_IDX].cnt_low;
+        ((uint64_t) TIMERG1.hw_timer[KEYBUS_TIMER_IDX].cnt_high) << 32
+        | TIMERG1.hw_timer[KEYBUS_TIMER_IDX].cnt_low;
 
   if (intr_status & BIT(KEYBUS_TIMER_IDX)) {
     clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
@@ -142,19 +160,19 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       periph_msg[byte_index] = (periph_msg[byte_index] << 1) | data;
     }
     // Clear interrupt
-    TIMERG0.int_clr_timers.t0 = 1;
+    TIMERG1.int_clr_timers.t0 = 1;
     if (bit_count == 1) {
       //byte_index = 0;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-      TIMERG0.int_clr_timers.t0 = 1;
-      //TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) (KEYBUS_BIT_TIME >> 32);
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_BIT_TIME;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
+      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+      TIMERG1.int_clr_timers.t0 = 1;
+      //TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) (KEYBUS_BIT_TIME >> 32);
+      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
+      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_BIT_TIME;
+      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
 
     } else if ((in_msg) && ((bit_count >= 255) || clock == last_clk)) { // Pause timer
       keybus_msg_t msg;
-      TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
+      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
       msg.timer_counter_value = timer_counter_value;
       msg.len_bits = bit_count;
       msg.len_bytes = byte_index + 1;
@@ -175,7 +193,7 @@ void IRAM_ATTR keybus_timer_isr(void *p) {
       memset(panel_msg, 0, 128);
       memset(periph_msg, 0, 128);
     }
-    TIMERG0.hw_timer[KEYBUS_TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
+    TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
     last_clk = clock;
     //if (clock) panel_msg[byte_index] <<= 1;
   }
@@ -210,7 +228,7 @@ void keybus_setup_gpio() {
 }
 
 void keybus_setup_timer() {
-  printf("Timer Setup:\nTIMER_BASE_CLK:\t\t%d\nKEYBUS_BIT_TIME:\t%d\n", TIMER_BASE_CLK, KEYBUS_BIT_TIME);
+  ESP_LOGD(TAG, "Timer Setup:\nTIMER_BASE_CLK:\t\t%d\nKEYBUS_BIT_TIME:\t%d\n", TIMER_BASE_CLK, KEYBUS_BIT_TIME);
   timer_config_t config;
   config.divider = KEYBUS_TIMER_DIVIDER;
   config.counter_dir = TIMER_COUNT_UP;

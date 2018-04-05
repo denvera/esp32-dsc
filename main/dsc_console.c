@@ -7,16 +7,19 @@
 #include "linenoise/linenoise.h"
 #include "argtable3/argtable3.h"
 
+#include "config.h"
 #include "dsc_console.h"
 #include "keybus_handler.h"
 
 static void register_monitor();
 static void register_write();
 static void register_reset();
+static void register_version();
 
 static int monitor_mode(int argc, char** argv);
 static int write(int argc, char** argv);
 static int reset(int argc, char** argv);
+static int version(int argc, char** argv);
 
 static struct {
     struct arg_int *write_str;
@@ -106,6 +109,20 @@ static int reset(int argc, char** argv) {
    esp_restart();
 }
 
+static void register_version() {
+  const esp_console_cmd_t cmd = {
+        .command = "version",
+        .help = "Print firmware version",
+        .hint = NULL,
+        .func = &version,
+    };
+    ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
+}
+static int version(int argc, char** argv) {
+  printf("ESP32 DSC Gateway v%s by Denver Abrey [denver@bitfire.co.za]\n", VERSION);
+  return 0;
+}
+
 void initialize_console()
 {
     /* Disable buffering on stdin and stdout */
@@ -155,4 +172,5 @@ void initialize_console()
   register_monitor();
   register_write();
   register_reset();
+  register_version();
 }
