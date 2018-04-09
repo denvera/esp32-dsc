@@ -31,12 +31,6 @@ char write_byte;
 static TaskHandle_t keybus_write_task_handle = NULL;
 SemaphoreHandle_t write_sem;
 
-static void inline print_timer_counter(uint64_t counter_value)
-{
-    printf("Counter: 0x%08x%08x\n", (uint32_t) (counter_value >> 32),
-                                    (uint32_t) (counter_value));
-    printf("Time   : %.8f s\n", (double) counter_value / KEYBUS_TIMER_SCALE);
-}
 
 void setup_gpio_timers(void *pvParameter) {
   keybus_setup_gpio();
@@ -52,11 +46,6 @@ void keybus_init() {
     ESP_LOGE(TAG, "Couldn't create keybus_write_task!");
   }
   xTaskCreatePinnedToCore(&setup_gpio_timers, "setup_gpio_timers", 8192, NULL, (configMAX_PRIORITIES-1), NULL, 1); // App CPU, Priority 10
-  // Below started in keybus_write_task to ensure ISRs sit on Core 1 (App)
-  // keybus_setup_timer();
-  // keybus_setup_gpio();
-  //setup_gpio_timers(NULL);
-  //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
 }
 
 static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
@@ -112,10 +101,10 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
 
 void keybus_write_task(void *pvParameter) {
   write_sem = xSemaphoreCreateBinary();
+  char b;
   if (write_sem == NULL) {
     ESP_LOGE(TAG, "Couldn't create write semaphore!");
   }
-  char b;
   ESP_LOGI(TAG, "keybus_write_task started");
   for( ;; ) {
       xQueueReceive(write_queue, &b, portMAX_DELAY);
@@ -124,67 +113,6 @@ void keybus_write_task(void *pvParameter) {
       //xSemaphoreGive(write_sem);
       ESP_LOGI(TAG, "Writing: %02X", b);
       xSemaphoreTake(write_sem, portMAX_DELAY);
-  }
-}
-
-void IRAM_ATTR keybus_timer_isr(void *p) {
-  // Read a bit
-
-  char clock, data;
-  uint32_t intr_status = TIMERG1.int_st_timers.val;
-  TIMERG1.hw_timer[KEYBUS_TIMER_IDX].update = 1;
-  uint64_t timer_counter_value =
-        ((uint64_t) TIMERG1.hw_timer[KEYBUS_TIMER_IDX].cnt_high) << 32
-        | TIMERG1.hw_timer[KEYBUS_TIMER_IDX].cnt_low;
-
-  if (intr_status & BIT(KEYBUS_TIMER_IDX)) {
-    clock = ((GPIO.in >> KEYBUS_CLOCK) & 0x1);
-    data = ((GPIO.in >> KEYBUS_DATA) & 0x1);
-    if (clock && ((last_clk == 0) || (bit_count == 0))) { // Panel to periphs
-      bit_count++;
-      panel_msg[byte_index] = (panel_msg[byte_index] << 1) | data;
-      //panel_msg[byte_index] |= data;
-      if (((bit_count == 8) || ((bit_count == 9)) || ((bit_count > 9) && ((bit_count-9) % 8 == 0))) && (byte_index <= KEYBUS_MSG_SIZE))  byte_index++;
-    } else { // Periphs to panel
-      periph_msg[byte_index] = (periph_msg[byte_index] << 1) | data;
-    }
-    // Clear interrupt
-    TIMERG1.int_clr_timers.t0 = 1;
-    if (bit_count == 1) {
-      //byte_index = 0;
-      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-      TIMERG1.int_clr_timers.t0 = 1;
-      //TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) (KEYBUS_BIT_TIME >> 32);
-      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_high = (uint32_t) 0;
-      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].alarm_low = (uint32_t) KEYBUS_BIT_TIME;
-      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 1;
-
-    } else if ((in_msg) && ((bit_count >= 255) || clock == last_clk)) { // Pause timer
-      keybus_msg_t msg;
-      TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.enable = 0;
-      msg.timer_counter_value = timer_counter_value;
-      msg.len_bits = bit_count;
-      msg.len_bytes = byte_index + 1;
-      //for (int i = 0; i <= byte_index; i++)
-      //   msg.msg[i] = panel_msg[i];
-      memcpy(msg.msg, panel_msg, byte_index+1);
-      memcpy(msg.pmsg, periph_msg, byte_index+1);
-      if (bit_count >= 32) {
-        xQueueSendFromISR(msg_queue, &msg, NULL);
-      } else {
-        in_msg = false;
-        bit_count = 0;
-        byte_index = 0;
-      }
-      in_msg = false;
-      bit_count = 0;
-      byte_index = 0;
-      memset(panel_msg, 0, 128);
-      memset(periph_msg, 0, 128);
-    }
-    TIMERG1.hw_timer[KEYBUS_TIMER_IDX].config.alarm_en = TIMER_ALARM_EN;
-    last_clk = clock;
-    //if (clock) panel_msg[byte_index] <<= 1;
   }
 }
 
