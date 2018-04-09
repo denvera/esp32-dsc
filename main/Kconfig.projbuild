@@ -1,10 +1,31 @@
-menu "DSC KeyBus Max Message Size"
+menu "DSC KeyBus Setup"
 
 config KEYBUS_MSG_SIZE
     int "Max KeyBus MSG Size in bytes"
     default 128
     help
         Max KeyBus message size in bytes
+
+choice KEYBUS_INTERFACE_IMPLEMENTATION
+  prompt "KeyBus Interface Implementation"
+  default KEYBUS_IMPL_TIMERS
+  help
+    Choose KeyBus protocol implementation
+
+config KEYBUS_IMPL_TIMERS
+  bool "Use Timers"
+config KEYBUS_IMPL_IRQ
+  bool "Only use interrupts on clk line"
+endchoice
+
+
+config KEYBUS_WAIT_US
+  int "KeyBus wait microseconds for end message"
+  default 2000
+  help
+    Microseconds elapsed since last bit received to determine new message
+
+
 endmenu
 
 

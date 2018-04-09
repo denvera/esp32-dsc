@@ -7,7 +7,15 @@
 
 #include "config.h"
 #include "dsc_console.h"
-#include "keybus_interface.h"
+
+#ifdef CONFIG_KEYBUS_IMPL_TIMERS
+#include "keybus_interface_timers.h"
+#endif
+#ifdef CONFIG_KEYBUS_IMPL_IRQ
+#include "keybus_interface_irq.h"
+#endif
+
+
 #include "keybus_handler.h"
 
 #include "httpd/include/httpd.h"

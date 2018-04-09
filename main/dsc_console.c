@@ -89,7 +89,7 @@ static int write(int argc, char** argv)
     if (sscanf(argv[i], "%i", &k) > 0) {
       printf("Writing %02X\n", k);
       c = k & 0xff;
-      xQueueSendFromISR(write_queue, &c, NULL);
+      xQueueSend(write_queue, &c, NULL);
     }
   }
   return 0;
