@@ -15,10 +15,10 @@
 
 
 void keybus_init();
-void keybus_reset_timer();
 void keybus_start_msg();
 void keybus_setup_gpio();
-void keybus_setup_timer();
+void keybus_setup_task();
 
-void IRAM_ATTR keybus_timer_isr(void *p);
 void keybus_write_task(void *pvParameter);
+void keybus_client_read_task(void *pvParameter);
+void keybus_stop_check_task(void *pvParameter);

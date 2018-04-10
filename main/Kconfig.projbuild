@@ -6,6 +6,12 @@ config KEYBUS_MSG_SIZE
     help
         Max KeyBus message size in bytes
 
+config KEYBUS_SNIFFING
+    bool "Enable keybus sniffing capability"
+    default y
+    help
+      Enable ability to intercept client/peripheral KeyBus messages
+
 choice KEYBUS_INTERFACE_IMPLEMENTATION
   prompt "KeyBus Interface Implementation"
   default KEYBUS_IMPL_TIMERS
