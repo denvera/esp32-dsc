@@ -90,11 +90,14 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
         msg.msg[byte_index] = 0; //Set next byte used to 0 to avoid having to do a memset above
       }
     } else {
-      if (byte_index == 2 && write_byte_ready && msg.msg[0] == 0x05) {
+      //if (byte_index == 2 && write_byte_ready && msg.msg[0] == 0x05) { //write coming in mid 2nd byte?
+      if (byte_index == 2 && (bit_count <= 9) && msg.msg[0] == 0x05) { //write coming in mid 2nd byte?
       //if (byte_index == 2 && (xSemaphoreTakeFromISR(write_sem, NULL) == pdTRUE) && msg.msg[0] == 0x05) {
-        gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT_OUTPUT);
-        writing = true;
-        write_byte_ready = false;
+        if (xQueueReceiveFromISR(write_queue, &write_byte, NULL) == pdTRUE) {
+          gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT_OUTPUT);
+          writing = true;
+          write_byte_ready = false;
+        }
       }
       if (writing) {
         if (byte_index > 2) {
@@ -124,11 +127,11 @@ void keybus_write_task(void *pvParameter) {
   }
   ESP_LOGI(TAG, "keybus_write_task started");
   for(;;) {
-      xQueueReceive(write_queue, &b, portMAX_DELAY);
-      write_byte = b;
-      write_byte_ready = true;
+      //xQueueReceive(write_queue, &b, portMAX_DELAY);
+      //write_byte = b;
+      //write_byte_ready = true;
       //xSemaphoreGive(write_sem);
-      ESP_LOGI(TAG, "Writing: %02X", b);
+      //ESP_LOGI(TAG, "Writing: %02X", b);
       xSemaphoreTake(write_sem, portMAX_DELAY);
   }
 }
