@@ -43,10 +43,10 @@ void keybus_init() {
   msg_queue = xQueueCreate(32, sizeof(keybus_msg_t));
   write_queue = xQueueCreate(32, sizeof(char));
   ESP_LOGI(TAG, "KeyBus IRQ Initialisation");
-  BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, 0, &keybus_write_task_handle, 0); // App CPU, Priority 10
-  if( task_ret != pdPASS ) {
-    ESP_LOGE(TAG, "Couldn't create keybus_write_task!");
-  }
+  // BaseType_t task_ret = xTaskCreatePinnedToCore(&keybus_write_task, "keybus_write_task_app_cpu", 8192, NULL, 0, &keybus_write_task_handle, 0); // App CPU, Priority 10
+  // if( task_ret != pdPASS ) {
+  //   ESP_LOGE(TAG, "Couldn't create keybus_write_task!");
+  // }
 #ifdef CONFIG_KEYBUS_SNIFFING
   xTaskCreatePinnedToCore(&keybus_client_read_task, "keybus_client_read_task", 8192, NULL, 2, NULL, 0); // App CPU, Priority 10
 #endif
@@ -69,7 +69,7 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
     // fire off previous message
     if (byte_index > 2) {
       msg.len_bytes = byte_index+1;
-      memset(msg.pmsg, 0xff, 128);
+      //memset(msg.pmsg, 0xff, 128);
       xQueueSendFromISR(msg_queue, &msg, NULL);
       //memset(msg.msg, 0xff, 128);
       last_dispatch_time = xthal_get_ccount();
@@ -88,6 +88,7 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
       if (((bit_count == 8) || ((bit_count == 9)) || ((bit_count > 9) && ((bit_count-9) % 8 == 0))) && (byte_index <= KEYBUS_MSG_SIZE))  {
         byte_index++;
         msg.msg[byte_index] = 0; //Set next byte used to 0 to avoid having to do a memset above
+        msg.pmsg[byte_index] = 0;
       }
     } else {
       //if (byte_index == 2 && write_byte_ready && msg.msg[0] == 0x05) { //write coming in mid 2nd byte?
@@ -103,7 +104,7 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
         if (byte_index > 2) {
           gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT);
           writing = false;
-          xSemaphoreGiveFromISR(write_sem, NULL);
+          //xSemaphoreGiveFromISR(write_sem, NULL);
         } else {
           gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT_OUTPUT);
           gpio_set_level(KEYBUS_DATA, ((write_byte >> (16-bit_count)) & 0x01));
@@ -111,6 +112,8 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
       }
 #ifdef CONFIG_KEYBUS_SNIFFING
       // Snoop
+      for (volatile int i = 0; i<=240*10; i++) { }; // This is disgusting :((
+      msg.pmsg[byte_index] = (msg.pmsg[byte_index] << 1) | ((GPIO.in >> KEYBUS_DATA) & 0x1);
 #endif
     }
     //xSemaphoreTakeFromISR(last_msg_time_sem, NULL);
@@ -156,7 +159,7 @@ void keybus_stop_check_task(void *pvParameter) {
         if (writing) {
           writing = false;
           write_byte_ready = false;
-          xSemaphoreGive(write_sem);
+          //xSemaphoreGive(write_sem);
         }
         failcheck = 0;
       }
