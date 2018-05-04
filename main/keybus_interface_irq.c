@@ -111,8 +111,8 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
         }
       }
 #ifdef CONFIG_KEYBUS_SNIFFING
-      // Snoop
-      for (volatile int i = 0; i<=240*10; i++) { }; // This is disgusting :((
+      // Snoop - We need to give the peripheral some time to react to the low clock, see below :(
+      for (volatile int i = 0; i<=240*10; i++) { }; // This is disgusting :(( (need around 20-50uS delay)
       msg.pmsg[byte_index] = (msg.pmsg[byte_index] << 1) | ((GPIO.in >> KEYBUS_DATA) & 0x1);
 #endif
     }
@@ -154,7 +154,7 @@ void keybus_stop_check_task(void *pvParameter) {
     //xSemaphoreTake(last_msg_time_sem, portMAX_DELAY);
     if ((XTHAL_GET_CCOUNT() - last_dispatch_time) > (250 * CONFIG_KEYBUS_WAIT_US * CONFIG_ESP32_DEFAULT_CPU_FREQ_MHZ)) {
       if (++failcheck >= 3) {
-        ESP_LOGW(TAG, "KeyBus clk stopped - switching to input!")
+        ESP_LOGW(TAG, "KeyBus clk stopped - switching to input!");
         gpio_set_direction(KEYBUS_DATA, GPIO_MODE_INPUT);
         if (writing) {
           writing = false;

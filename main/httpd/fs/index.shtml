@@ -1,0 +1,11 @@
+<html>
+<head><title>ESP32 DSC</title></head>
+<body>
+<table>
+<tr>
+  <td>Version</td><td><!--#s_ver--></td>
+</tr>
+</table>
+<a href="settings.shtml">Settings and Maintenance</a>
+</body>
+</html>

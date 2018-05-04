@@ -17,9 +17,9 @@
 #define WIN32_LEAN_AND_MEAN
 #include "windows.h"
 #else
-#include <dir.h>
+#include <sys/dir.h>
 #endif
-#include <dos.h>
+//#include <dos.h>
 #include <string.h>
 #include <time.h>
 #include <sys/stat.h>
@@ -110,13 +110,13 @@ int deflate_level = 10; /* default compression level, can be changed via command
 #define LWIP_HTTPD_SSI             1
 #include "lwip/init.h"
 #include "../httpd_structs.h"
-#include "lwip/apps/fs.h"
+#include "../include/fs.h"
 
-#include "../core/inet_chksum.c"
-#include "../core/def.c"
+#include "core/inet_chksum.c"
+#include "core/def.c"
 
 /** (Your server name here) */
-const char *serverID = "Server: "HTTPD_SERVER_AGENT"\r\n";
+const char *serverID = "Server: ESP32-DSC\r\n";
 char serverIDBuffer[1024];
 
 /* change this to suit your MEM_ALIGNMENT */

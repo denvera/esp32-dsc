@@ -102,7 +102,12 @@
 #include <stdlib.h> /* atoi */
 #include <stdio.h>
 
-#define lwip_strnstr(s1, s2, len) strstr(s1, s2)
+#include "../morestrings.h"
+
+//#define lwip_strnstr(s1, s2, len) strstr(s1, s2)
+//#define lwip_stricmp(s1, s2) strcasecmp(s1, s2)
+#define lwip_strnstr(s1, s2, len) strnstr(s1, s2, len)
+#define lwip_stricmp(s1, s2) strcasecmp(s1, s2)
 
 #if LWIP_TCP && LWIP_CALLBACK_API
 
