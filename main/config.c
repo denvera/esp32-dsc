@@ -15,8 +15,52 @@
 #include "nvs_flash.h"
 #include "esp_ota_ops.h"
 
+#include "dsc_tcp.h"
+#include "mqtt.h"
 
 static const char* TAG = "config";
+TaskHandle_t config_task_handle = NULL;
+configuration_t dsc_config;
+
+int load_config() {
+  nvs_handle nvs_config;
+  esp_err_t e = nvs_flash_init();
+  if (e == ESP_OK) e = nvs_open(NVS_CONFIG_NAMESPACE, NVS_READONLY, &nvs_config);
+  if (e == ESP_OK) {
+    size_t required_size;
+    e = nvs_get_str(nvs_config, "dscserver", NULL, &required_size);
+    char* dscserver = malloc(required_size);
+    e = nvs_get_str(nvs_config, "dscserver", dscserver, &required_size);
+    if (e != ESP_OK) {
+      dscserver = NULL;
+      ESP_LOGE(TAG, "Couldn't read dscserver from flash: %s", esp_err_to_name(e));
+      return -1;
+    }
+    uint8_t server_type = SERVER_TCP;
+    e = nvs_get_u8(nvs_config, "server_type", &server_type);
+    if (e != ESP_OK) ESP_LOGW(TAG, "Couldn't read server type, defaulting to SERVER_TCP: %s", esp_err_to_name(e));
+
+    uint16_t port = 10242;
+    e = nvs_get_u16(nvs_config, "server_port", &port);
+    if (e != ESP_OK) ESP_LOGW(TAG, "Couldn't read server port, defaulting to 10242: %s", esp_err_to_name(e));
+    dsc_config.port = port;
+    dsc_config.dscserver = dscserver;
+    dsc_config.server_type = (server_type_t)server_type;
+    dsc_config.dispatch_msg = (server_type == SERVER_MQTT) ? mqtt_dispatch_msg : dsc_tcp_dispatch_msg;
+    ESP_LOGI(TAG, "Config loaded:");
+    ESP_LOGI(TAG, "Server: %s, Server Type: %d, Server Port: %d", dscserver, server_type, port);
+    return ESP_OK;
+  } else {
+    dsc_config = (configuration_t) {
+      .port = 10242,
+      .dscserver = NULL,
+      .server_type = SERVER_TCP,
+      .dispatch_msg = dsc_tcp_dispatch_msg
+    };
+    ESP_LOGE(TAG, "Couldn't find config namespace, using hardcoded defaults: %s", esp_err_to_name(e));
+    return -1;
+  }
+}
 
 void config_task(void *pvParameter) {
   uint8_t reset_button = 0;

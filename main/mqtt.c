@@ -20,12 +20,21 @@
 #include "esp_log.h"
 #include "mqtt_client.h"
 
+#include "keybus_handler.h"
+
 static const char *TAG = "mqtt";
-struct keybus_queues {
-  char * queue_prefix;
-  char * write_queue;
-  char * msg_queue;
-};
+static char * mqtt_queue_prefix;
+static char * mqtt_write_queue;
+static char * mqtt_msg_queue;
+static esp_mqtt_client_handle_t mqtt_client = NULL;
+
+esp_err_t mqtt_dispatch_msg(keybus_msg_t msg) {
+  if (mqtt_client) {
+    ESP_LOGI(TAG, "Write msg");
+    esp_mqtt_client_publish(mqtt_client, mqtt_msg_queue, "asd", 3, 0, 0);
+  }
+  return ESP_OK;
+}
 
 static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
 {
@@ -36,7 +45,7 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
     switch (event->event_id) {
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
-            msg_id = esp_mqtt_client_subscribe(client, keybus_queues->write_queue, 0);
+            msg_id = esp_mqtt_client_subscribe(client, mqtt_write_queue, 0);
             ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
             break;
         case MQTT_EVENT_DISCONNECTED:
@@ -71,13 +80,13 @@ esp_mqtt_client_handle_t mqtt_start(char * mqtt_uri)
 
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_base_mac_addr_get(mac));
-    struct keybus_queues kb;
-    kb.queue_prefix = malloc(32);
-    kb.write_queue  = malloc(32);
-    kb.msg_queue    = malloc(32);
-    sprintf(kb.queue_prefix, "/bitfire/esp32-dsc/%x%x%x",       mac[3], mac[4], mac[5]);
-    sprintf(kb.write_queue,  "/bitfire/esp32-dsc/%x%x%x/write", mac[3], mac[4], mac[5]);
-    sprintf(kb.msg_queue,    "/bitfire/esp32-dsc/%x%x%x/msg",   mac[3], mac[4], mac[5]);
+    //struct keybus_queues kb;
+    mqtt_queue_prefix = malloc(32);
+    mqtt_write_queue  = malloc(32);
+    mqtt_msg_queue    = malloc(32);
+    sprintf(mqtt_queue_prefix, "/bitfire/esp32-dsc/%x%x%x",       mac[3], mac[4], mac[5]);
+    sprintf(mqtt_write_queue,  "/bitfire/esp32-dsc/%x%x%x/write", mac[3], mac[4], mac[5]);
+    sprintf(mqtt_msg_queue,    "/bitfire/esp32-dsc/%x%x%x/msg",   mac[3], mac[4], mac[5]);
     const esp_mqtt_client_config_t mqtt_cfg = {
         .uri = mqtt_uri,
         .event_handle = mqtt_event_handler,

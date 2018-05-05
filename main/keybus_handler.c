@@ -12,14 +12,33 @@ char last_msg[128], last_periph_msg[128];
 char formatted_msg[128];
 static bool monitor_mode = false;
 
+xQueueHandle msg_queue, write_queue, response_queue = NULL;
+
+int format_msg(char msg[], int msg_len, char * outbuf) {
+  memset(outbuf, 0, 3*msg_len);
+  int outlen = 0, ret;
+  for (int i = 0; i < msg_len; i++) {
+    ret = snprintf(outbuf+(i*3), 4, "%02X ", msg[i]);
+    if (ret >= 0) {
+      outlen += ret;
+    } else {
+      return ret;
+    }
+  }
+  return outlen;
+}
+
 void keybus_handler_task(void *pvParameter) {
+  response_queue = xQueueCreate(32, sizeof(keybus_msg_t)); // Swiched to dispatch function
   gpio_pad_select_gpio(LED_GPIO);
 /* Set the GPIO as a push/pull output */
   gpio_set_direction(LED_GPIO, GPIO_MODE_OUTPUT);
   unsigned char led = 0;
+  bool new_msg = false;
   memset(last_msg, 0, 128);
   memset(last_periph_msg, 0, 128);
   memset(formatted_msg, 0, 128);
+
   while(1) {
       keybus_msg_t msg;
       xQueueReceive(msg_queue, &msg, portMAX_DELAY);
@@ -27,6 +46,7 @@ void keybus_handler_task(void *pvParameter) {
       gpio_set_level(LED_GPIO, led);
       //printf("%x %x %x %x %x\n", msg.msg[0], msg.msg[1], msg.msg[2], msg.msg[3], msg.msg[4]);
       if (memcmp(msg.msg, last_msg, msg.len_bytes) != 0) {
+        new_msg = true;
         if (monitor_mode) {
           //printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Panel: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
           for (int i = 0; i < msg.len_bytes; i++)
@@ -37,6 +57,7 @@ void keybus_handler_task(void *pvParameter) {
         memcpy(last_msg, msg.msg, msg.len_bytes);
       }
       if (periph_msg_present(msg.pmsg, msg.len_bytes)) {
+        new_msg = true;
         if (monitor_mode) {
           //printf("\n%-10s%lld Bits: %d Bytes: %d\t", "Periph: ", msg.timer_counter_value, msg.len_bits, msg.len_bytes);
           //for (int i = 0; i < msg.len_bytes; i++) printf("%02X ", msg.pmsg[i]);
@@ -48,7 +69,10 @@ void keybus_handler_task(void *pvParameter) {
         }
         memcpy(last_periph_msg, msg.pmsg, msg.len_bytes);
       }
-
+      if (new_msg) {
+        dsc_config.dispatch_msg(msg);
+        new_msg = false;
+      }
       //in_msg = false;
       //timer_start(KEYBUS_TIMER_GROUP, KEYBUS_TIMER_IDX);
   }

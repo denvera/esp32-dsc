@@ -20,8 +20,6 @@
 #include "http.h"
 #include "config.h"
 
-TaskHandle_t config_task_handle = NULL;
-
 static const char* TAG = "http";
 #define NUM_SSI_TAGS 1
 #define NUM_CGI_HANDLERS 1

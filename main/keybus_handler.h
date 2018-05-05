@@ -1,3 +1,6 @@
+#ifndef KEYBUS_HANDLER_H
+#define KEYBUS_HANDLER_H
+
 #include "freertos/queue.h"
 
 //#define KEYBUS_MSG_SIZE 128
@@ -11,11 +14,14 @@ typedef struct {
     uint64_t timer_counter_value;
 } keybus_msg_t;
 
-xQueueHandle msg_queue, write_queue;
+extern xQueueHandle msg_queue, write_queue, response_queue;
 
-
+int format_msg(char msg[], int msg_len, char * outbuf);
 void keybus_handler_task(void *pvParameter);
 int keybus_handler_check_crc(char *msg, char len);
 bool periph_msg_present(char periph_msg[], int len);
 bool keybus_key_crc_ok(char key);
 void toggle_monitor_mode();
+
+
+#endif

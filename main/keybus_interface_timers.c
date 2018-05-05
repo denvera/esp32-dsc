@@ -62,6 +62,8 @@ static void IRAM_ATTR keybus_clock_isr_handler(void* arg)
     if (gpio_num == KEYBUS_CLOCK) {
 
       xTaskNotifyFromISR(keybus_write_task_handle, 0x00, eNoAction, NULL);
+      // TODO: Kick of context switch if needed to handl this.
+      
       if (!in_msg && clock) {
         byte_index = 0;
         in_msg = true;

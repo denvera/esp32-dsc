@@ -20,6 +20,8 @@
 #include "keybus_handler.h"
 #include "httpd/include/httpd.h"
 #include "simple_wifi.h"
+#include "mqtt.h"
+#include "dsc_tcp.h"
 
 #define AUTHORS "Denver Abrey [denver@bitfire.co.za]"
 
@@ -44,6 +46,7 @@ void app_main()
     ESP_LOGI(TAG, "%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
+    load_config();
     initialize_console();
     ESP_LOGI(TAG, "Starting console task...");
     xTaskCreatePinnedToCore(&console_task, "console_task_pro_cpu", 8192, NULL, 0, NULL, 0); // App CPU, Priority 10
@@ -56,5 +59,13 @@ void app_main()
     xTaskCreatePinnedToCore(&config_task, "config_task_app_cpu", 8192, NULL, 0, &config_task_handle, 0);
     ESP_LOGI(TAG, "Starting HTTPD...");
     setup_httpd(config_task_handle);
+    switch (dsc_config.server_type) {
+      case SERVER_MQTT:
+        mqtt_start(dsc_config.dscserver);
+        break;
 
+      case SERVER_TCP:
+        xTaskCreatePinnedToCore(&dsc_tcp_task, "dsc_tcp_task_pro_cpu", 8192, NULL, 0, NULL, 0);
+        break;
+    }
 }
