@@ -64,7 +64,7 @@ esp_err_t dsc_tcp_dispatch_msg(keybus_msg_t msg) {
       dsc_tcp_write(dsc_socket, msg_buf, msg.len_bytes+2);
       if (periph_msg_present(msg.pmsg, msg.len_bytes)) {
         p_msg_buf[1] = DSC_CLIENT;
-        memcpy(msg_buf+2, msg.pmsg, msg.len_bytes);
+        memcpy(p_msg_buf+2, msg.pmsg, msg.len_bytes);
         dsc_tcp_write(dsc_socket, p_msg_buf, msg.len_bytes+2);
       }
     }
