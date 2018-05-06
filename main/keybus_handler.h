@@ -14,6 +14,12 @@ typedef struct {
     uint64_t timer_counter_value;
 } keybus_msg_t;
 
+typedef enum {
+	DSC_PANEL,
+	DSC_STATUS,
+	DSC_CLIENT
+} dsc_msg_t;
+
 extern xQueueHandle msg_queue, write_queue, response_queue;
 
 int format_msg(char msg[], int msg_len, char * outbuf);
