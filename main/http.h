@@ -1,14 +1,17 @@
-#include "lwip/def.h"
-#include "lwip/ip.h"
-#include "lwip/tcp.h"
+#ifndef HTTP_H
+#define HTTP_H
 
-err_t httpd_post_begin(void *connection, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len, char *response_uri,
-                       u16_t response_uri_len, u8_t *post_auto_wnd);
+#include "libesphttpd/route.h"
+#include "libesphttpd/webpages-espfs.h"
+#include "libesphttpd/espfs.h"
+#include "libesphttpd/httpdespfs.h"
+#include "libesphttpd/httpd-freertos.h"
 
-err_t httpd_post_receive_data(void *connection, struct pbuf *p);
-
-void httpd_post_finished(void *connection, char *response_uri, u16_t response_uri_len);
-
-void httpd_cgi_handler(const char* uri, int iNumParams, char **pcParam, char **pcValue);
+CgiStatus ICACHE_FLASH_ATTR tplIndex(HttpdConnData *connData, char *token, void **arg);
+CgiStatus ICACHE_FLASH_ATTR tplSettings(HttpdConnData *connData, char *token, void **arg);
+CgiStatus ICACHE_FLASH_ATTR cgiReboot(HttpdConnData *connData);
+CgiStatus ICACHE_FLASH_ATTR cgiSettings(HttpdConnData *connData);
 void setup_httpd();
+
+
+#endif

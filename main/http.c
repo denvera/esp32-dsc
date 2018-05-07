@@ -17,91 +17,129 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "httpd/include/httpd_opts.h"
-#include "httpd/include/httpd.h"
+#include "esp_log.h"
+#include "libesphttpd/route.h"
+#include "libesphttpd/webpages-espfs.h"
+#include "libesphttpd/espfs.h"
+#include "libesphttpd/httpdespfs.h"
+#include "libesphttpd/httpd-freertos.h"
+
 #include "http.h"
 #include "config.h"
+#include "simple_wifi.h"
 
 static const char* TAG = "http";
-#define NUM_SSI_TAGS 2
-#define NUM_CGI_HANDLERS 1
 
-static char const *actions_cgi_handler(int index, int numParams, char const *param[], char const *value[]);
+HttpdInstance httpdInstance;
+HttpdFreertosInstance httpdFreeRtosInstance;
 
-static char const *  ssi_tags[] = {
-    "s_ver",
-    "s_uptime"
+HttpdBuiltInUrl builtInUrls[]={
+  ROUTE_REDIRECT("/", "/index.tpl"),
+  ROUTE_TPL("/index.tpl", tplIndex),
+  ROUTE_REDIRECT("/settings", "/settings/settings.tpl"),
+  ROUTE_REDIRECT("/settings/", "/settings/settings.tpl"),
+  ROUTE_TPL("/settings/settings.tpl", tplSettings),
+  ROUTE_CGI("/settings/reboot.cgi", cgiReboot),
+  ROUTE_CGI("/settings/settings.cgi", cgiSettings),
+  //ROUTE_REDIRECT("/dsc", "/dsc/index.html"),
+	//ROUTE_REDIRECT("/dsc/", "/dsc/index.html"),
+	//ROUTE_CGI("/dsc/dscconf.cgi", cgiDSCConf),
+
+  ROUTE_FILESYSTEM(),
+  ROUTE_END()
 };
 
-static tCGI const cgi_handlers[] = {
-    { "/actions.cgi", &actions_cgi_handler },
-};
-
-//return (char *)0;
-static char const * actions_cgi_handler(int index, int numParams, char const *param[], char const *value[]) {
-  //ESP_LOGI(TAG, "Action");
-   for (int i = 0; i < numParams; ++i) {
-         if (strstr(param[i], "action") != (char *)0) {      // param text found?
-  //         ESP_LOGI(TAG, "Action");
-           if (!strcmp(value[i], "factory")) {
-             //nvs_flash_erase();
-             //nvs_flash_erase_partition("otadata");
-             // esp_partition_t *f = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, "factory");
-             // ESP_ERROR_CHECK(esp_ota_set_boot_partition(f))
-             // esp_restart();
-             //software_reset();
-             xTaskNotify(config_task_handle, RESET_FACTORY, eSetValueWithOverwrite);
-             return "/done.html";
-           }
-         }
-     }
-  return (char *)0;
-}
-
-static u16_t ssi_handler(int iIndex, char *pcInsert, int iInsertLen) {
-  int64_t uptime_us = esp_timer_get_time();
-  int hrs = (uptime_us / 1000 / 1000 / 3600);
-  int min = (uptime_us / 1000 / 1000 /60) % 60;
-  int s = (uptime_us / 1000 / 1000) % 60;
-  switch (iIndex) {
-    case 0: // s_version
-      return snprintf(pcInsert, LWIP_HTTPD_MAX_TAG_INSERT_LEN, VERSION);
-      break;
-    case 1: // s_uptime
-      return snprintf(pcInsert, LWIP_HTTPD_MAX_TAG_INSERT_LEN, "%d hrs %d min %d s", hrs, min, s);
-      break;
+CgiStatus ICACHE_FLASH_ATTR tplIndex(HttpdConnData *connData, char *token, void **arg) {
+  if (token==NULL) return HTTPD_CGI_DONE;
+  if (strcmp(token, "uptime") == 0) {
+    char buf[128];
+    int len;
+    int64_t uptime_us = esp_timer_get_time();
+    int hrs = (uptime_us / 1000 / 1000 / 3600);
+    int min = (uptime_us / 1000 / 1000 /60) % 60;
+    int s = (uptime_us / 1000 / 1000) % 60;
+    len = snprintf(buf, sizeof(buf), "%d hrs %d min %d s", hrs, min, s);
+    httpdSend(connData, buf, len);
+  } else if (strcmp(token, "version") == 0) {
+    httpdSend(connData, VERSION, -1);
   }
-  return 0;
+  return HTTPD_CGI_DONE;
 }
 
-void httpd_cgi_handler(const char* uri, int iNumParams, char **pcParam, char **pcValue) {
-  ESP_LOGI(TAG, "CGI: %s Params: %d", uri, iNumParams);
+CgiStatus ICACHE_FLASH_ATTR tplSettings(HttpdConnData *connData, char *token, void **arg) {
+  if (token==NULL) return HTTPD_CGI_DONE;
+  if (strcmp(token, "dscserver") == 0) {
+    char buf[128];
+    int len;
+    if (dsc_config.dscserver != NULL) {
+      len = snprintf(buf, sizeof(buf), "%s", dsc_config.dscserver);
+      httpdSend(connData, buf, len);
+    } else {
+      httpdSend(connData, "Not Set", -1);
+    }
+  } else if (strcmp(token, "version") == 0) {
+    httpdSend(connData, VERSION, -1);
+  }
+  return HTTPD_CGI_DONE;
 }
 
-err_t httpd_post_begin(void *connection, const char *uri, const char *http_request,
-                       u16_t http_request_len, int content_len, char *response_uri,
-                       u16_t response_uri_len, u8_t *post_auto_wnd) {
-// Handle post
-  ESP_LOGI(TAG, "Post: URI: %s [%d]\n", uri, content_len);
-  return ERR_OK;
+CgiStatus ICACHE_FLASH_ATTR cgiSettings(HttpdConnData *connData) {
+  char dscserver[32];
+  httpdFindArg(connData->post.buff, "dscserver", dscserver, sizeof(dscserver));
+  ESP_LOGW(TAG, "Setting DSC Server to %s", dscserver);
+  nvs_handle nvs;
+  ESP_ERROR_CHECK(nvs_open("config", NVS_READWRITE, &nvs));
+  ESP_ERROR_CHECK(nvs_set_str(nvs, "dscserver", dscserver));
+  ESP_ERROR_CHECK(nvs_commit(nvs));
+  nvs_close(nvs);
+
+  httpdRedirect(connData, "done.html");
+  return HTTPD_CGI_DONE;
 }
 
-err_t httpd_post_receive_data(void *connection, struct pbuf *p) {
-  char *str = malloc(p->len + 1);
-  memset(str, 0, p->len+1);
-  strncpy(str, p->payload, p->len);
-  printf("Post data: %s\n", str);
-  free(p);
-  free(str);
-  return ERR_OK;
+CgiStatus ICACHE_FLASH_ATTR cgiReboot(HttpdConnData *connData) {
+  char buf[128];
+  int len;
+
+  if (connData->isConnectionClosed) {
+    //Connection aborted. Clean up.
+    return HTTPD_CGI_DONE;
+  }
+  if (connData->requestType!=HTTPD_METHOD_POST) {
+    //Sorry, we only accept GET requests.
+    httpdStartResponse(connData, 406);  //http error code 'unacceptable'
+    httpdEndHeaders(connData);
+    return HTTPD_CGI_DONE;
+  }
+
+  len=httpdFindArg(connData->post.buff, "rebootfactory", buf, sizeof(buf));
+  if (len != 0) {
+    //if (strcmp(buf, "factory") == 0) {
+      ESP_LOGW(TAG, "Factory Reboot");
+      xTaskNotify(config_task_handle, RESET_FACTORY, eSetValueWithOverwrite);
+      httpdRedirect(connData, "done.html");
+    //}
+  } else {
+
+    httpdSend(connData, "Unknown reboot type", -1);
+  }
+  return HTTPD_CGI_DONE;
 }
 
-void httpd_post_finished(void *connection, char *response_uri, u16_t response_uri_len) {
-}
 
 void setup_httpd(TaskHandle_t c) {
   config_task_handle = c;
-  http_set_ssi_handler((tSSIHandler)ssi_handler, ssi_tags, NUM_SSI_TAGS);
-  http_set_cgi_handlers((const tCGI *)cgi_handlers, NUM_CGI_HANDLERS);
-  httpd_init();
+  xEventGroupWaitBits(wifi_event_group, WIFI_CONNECTED_BIT,
+                         false, true, portMAX_DELAY);
+  espFsInit((void*)(webpages_espfs_start));
+  void * connBuf = malloc(sizeof(RtosConnType) * 16);
+  if (!connBuf) {
+    size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    ESP_LOGE(TAG, "Requested %d bytes, %d free", (sizeof(RtosConnType) * 16), free_heap);
+    ESP_LOGE(TAG, "malloc failed: %d", errno);
+    return;
+  }
+	httpdFreertosInit(&httpdFreeRtosInstance, builtInUrls, 80, connBuf, 16, HTTPD_FLAG_NONE);
+  httpdInstance = httpdFreeRtosInstance.httpdInstance;
+
 }

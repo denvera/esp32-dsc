@@ -27,7 +27,7 @@ int load_config() {
   esp_err_t e = nvs_flash_init();
   if (e == ESP_OK) e = nvs_open(NVS_CONFIG_NAMESPACE, NVS_READONLY, &nvs_config);
   if (e == ESP_OK) {
-    size_t required_size;
+    size_t required_size = 0;
     e = nvs_get_str(nvs_config, "dscserver", NULL, &required_size);
     char* dscserver = malloc(required_size);
     e = nvs_get_str(nvs_config, "dscserver", dscserver, &required_size);
