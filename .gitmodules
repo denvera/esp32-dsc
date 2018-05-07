@@ -1,3 +1,6 @@
 [submodule "components/espmqtt"]
 	path = components/espmqtt
 	url = https://github.com/tuanpmt/espmqtt.git
+[submodule "components/libesphttpd"]
+	path = components/libesphttpd
+	url = https://github.com/denvera/libesphttpd.git

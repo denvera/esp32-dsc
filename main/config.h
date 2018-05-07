@@ -2,7 +2,7 @@
 #define CONFIG_H
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#define VERSION "1.0.3"
+#define VERSION "1.0.4"
 
 #define USER_GPIO GPIO_NUM_0
 #define LED_GPIO GPIO_NUM_2

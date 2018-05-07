@@ -10,6 +10,8 @@
 #include "rom/crc.h"
 #include "rom/rtc.h"
 #include "esp_partition.h"
+#include "esp_timer.h"
+#include "esp_types.h"
 #include "nvs_flash.h"
 #include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
@@ -21,13 +23,14 @@
 #include "config.h"
 
 static const char* TAG = "http";
-#define NUM_SSI_TAGS 1
+#define NUM_SSI_TAGS 2
 #define NUM_CGI_HANDLERS 1
 
 static char const *actions_cgi_handler(int index, int numParams, char const *param[], char const *value[]);
 
 static char const *  ssi_tags[] = {
-    "s_ver"
+    "s_ver",
+    "s_uptime"
 };
 
 static tCGI const cgi_handlers[] = {
@@ -56,9 +59,17 @@ static char const * actions_cgi_handler(int index, int numParams, char const *pa
 }
 
 static u16_t ssi_handler(int iIndex, char *pcInsert, int iInsertLen) {
+  int64_t uptime_us = esp_timer_get_time();
+  int hrs = (uptime_us / 1000 / 1000 / 3600);
+  int min = (uptime_us / 1000 / 1000 /60) % 60;
+  int s = (uptime_us / 1000 / 1000) % 60;
   switch (iIndex) {
     case 0: // s_version
       return snprintf(pcInsert, LWIP_HTTPD_MAX_TAG_INSERT_LEN, VERSION);
+      break;
+    case 1: // s_uptime
+      return snprintf(pcInsert, LWIP_HTTPD_MAX_TAG_INSERT_LEN, "%d hrs %d min %d s", hrs, min, s);
+      break;
   }
   return 0;
 }

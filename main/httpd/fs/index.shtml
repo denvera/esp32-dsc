@@ -5,7 +5,11 @@
 <tr>
   <td>Version</td><td><!--#s_ver--></td>
 </tr>
+<tr>
+  <td>Uptime</td><td><!--#s_uptime--></td>
+</tr>
 </table>
+<br>
 <a href="settings.shtml">Settings and Maintenance</a>
 </body>
 </html>
