@@ -1,7 +1,7 @@
 #ifndef DSC_TCP_H
 #define DSC_TCP_H
 
-#define RECV_BUF_SIZE 256
+#define DSC_TCP_RECV_BUF_SIZE 256
 
 #include "keybus_handler.h"
 

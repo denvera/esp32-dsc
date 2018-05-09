@@ -2,6 +2,7 @@
 #define CONFIG_H
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "keybus_handler.h"
 #define VERSION "1.0.4"
 
 #define USER_GPIO GPIO_NUM_0
@@ -21,7 +22,7 @@ typedef struct {
   char * dscserver;
   int port;
   server_type_t server_type;
-  esp_err_t (*dispatch_msg)(keybus_t);
+  esp_err_t (*dispatch_msg)(keybus_msg_t);
 } configuration_t;
 
 extern configuration_t dsc_config;

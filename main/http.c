@@ -26,7 +26,7 @@
 
 #include "http.h"
 #include "config.h"
-#include "simple_wifi.h"
+#include "wifi.h"
 
 static const char* TAG = "http";
 
@@ -62,15 +62,20 @@ CgiStatus ICACHE_FLASH_ATTR tplIndex(HttpdConnData *connData, char *token, void 
     httpdSend(connData, buf, len);
   } else if (strcmp(token, "version") == 0) {
     httpdSend(connData, VERSION, -1);
+  } else if (strcmp(token , "heap") == 0) {
+    char buf[32];
+    size_t free_heap = heap_caps_get_free_size(MALLOC_CAP_8BIT);
+    int len = snprintf(buf, sizeof(buf), "%d bytes", free_heap);
+    httpdSend(connData, buf, len);
   }
   return HTTPD_CGI_DONE;
 }
 
 CgiStatus ICACHE_FLASH_ATTR tplSettings(HttpdConnData *connData, char *token, void **arg) {
   if (token==NULL) return HTTPD_CGI_DONE;
+  int len;
   if (strcmp(token, "dscserver") == 0) {
     char buf[128];
-    int len;
     if (dsc_config.dscserver != NULL) {
       len = snprintf(buf, sizeof(buf), "%s", dsc_config.dscserver);
       httpdSend(connData, buf, len);
@@ -79,21 +84,45 @@ CgiStatus ICACHE_FLASH_ATTR tplSettings(HttpdConnData *connData, char *token, vo
     }
   } else if (strcmp(token, "version") == 0) {
     httpdSend(connData, VERSION, -1);
-  }
+  } else if (strcmp(token, "port") == 0) {
+    char s_port[32];
+    len = snprintf(s_port, sizeof(s_port), "%d", dsc_config.port);
+    httpdSend(connData, s_port, len);
+  } else if (strcmp(token, "servertype") == 0) {
+    const char *s_servertype = (dsc_config.server_type == SERVER_MQTT) ? "MQTT" : "TCP";
+    httpdSend(connData, s_servertype, strlen(s_servertype));
+    }
   return HTTPD_CGI_DONE;
 }
 
 CgiStatus ICACHE_FLASH_ATTR cgiSettings(HttpdConnData *connData) {
   char dscserver[32];
-  httpdFindArg(connData->post.buff, "dscserver", dscserver, sizeof(dscserver));
-  ESP_LOGW(TAG, "Setting DSC Server to %s", dscserver);
+  char s_servertype[32], s_port[32];
+  uint8_t servertype;
+  //uint16_t port;
   nvs_handle nvs;
   ESP_ERROR_CHECK(nvs_open("config", NVS_READWRITE, &nvs));
-  ESP_ERROR_CHECK(nvs_set_str(nvs, "dscserver", dscserver));
+  if (httpdFindArg(connData->post.buff, "dscserver", dscserver, sizeof(dscserver)) > 0) {
+    ESP_LOGW(TAG, "Setting DSC Server to %s", dscserver);
+    ESP_ERROR_CHECK(nvs_set_str(nvs, "dscserver", dscserver));
+  }
+  if (httpdFindArg(connData->post.buff, "servertype", s_servertype, sizeof(s_servertype)) > 0) {
+    servertype = (strcmp(s_servertype, "MQTT") == 0) ? SERVER_MQTT : SERVER_TCP;
+    ESP_LOGW(TAG, "Setting server type to %s", s_servertype);
+    ESP_ERROR_CHECK(nvs_set_u8(nvs, "server_type", servertype));
+  } else {
+    ESP_ERROR_CHECK(nvs_set_u8(nvs, "servertype", SERVER_TCP));
+  }
+  if (httpdFindArg(connData->post.buff, "port", s_port, sizeof(s_port)) > 0) {
+    ESP_LOGW(TAG, "Setting port to %d", atoi(s_port));
+ESP_ERROR_CHECK(nvs_set_u16(nvs, "server_port", atoi(s_port)));
+  } else {
+    ESP_ERROR_CHECK(nvs_set_u16(nvs, "server_port", 10242));
+  }
   ESP_ERROR_CHECK(nvs_commit(nvs));
   nvs_close(nvs);
 
-  httpdRedirect(connData, "done.html");
+  httpdRedirect(connData, "/done.html");
   return HTTPD_CGI_DONE;
 }
 
@@ -117,7 +146,7 @@ CgiStatus ICACHE_FLASH_ATTR cgiReboot(HttpdConnData *connData) {
     //if (strcmp(buf, "factory") == 0) {
       ESP_LOGW(TAG, "Factory Reboot");
       xTaskNotify(config_task_handle, RESET_FACTORY, eSetValueWithOverwrite);
-      httpdRedirect(connData, "done.html");
+      httpdRedirect(connData, "/done.html");
     //}
   } else {
 

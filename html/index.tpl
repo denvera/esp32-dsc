@@ -13,6 +13,9 @@
   <td>Version</td><td>%version%</td>
 </tr>
 <tr>
+  <td>Free Heap</td><td>%heap%</td>
+</tr>
+<tr>
   <td>Uptime</td><td>%uptime%</td>
 </tr>
 </tbody>

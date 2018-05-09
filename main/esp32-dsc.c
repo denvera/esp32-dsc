@@ -19,7 +19,7 @@
 
 #include "keybus_handler.h"
 #include "httpd/include/httpd.h"
-#include "simple_wifi.h"
+#include "wifi.h"
 #include "mqtt.h"
 #include "dsc_tcp.h"
 
@@ -54,7 +54,7 @@ void app_main()
     ESP_LOGI(TAG, "Starting KeyBus handler task...");
     xTaskCreatePinnedToCore(&keybus_handler_task, "keybus_task_app_cpu", 8192, NULL, 0, NULL, 0); // App CPU, Priority 10
     ESP_LOGI(TAG, "Starting WiFi...");
-    simple_wifi_init();
+    start_wifi();
     ESP_LOGI(TAG, "Starting config task...");
     xTaskCreatePinnedToCore(&config_task, "config_task_app_cpu", 8192, NULL, 0, &config_task_handle, 0);
     ESP_LOGI(TAG, "Starting HTTPD...");

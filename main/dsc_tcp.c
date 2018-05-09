@@ -16,7 +16,7 @@
 
 #include "dsc_tcp.h"
 #include "config.h"
-#include "simple_wifi.h"
+#include "wifi.h"
 #include "keybus_handler.h"
 
 static const char *TAG = "dsc_tcp";
@@ -109,7 +109,7 @@ void dsc_tcp_task(void *pvParameters) {
   char * dsc_server = dsc_config.dscserver;
   int port = dsc_config.port;
   char s_port[16];
-  char recv_buf[256];
+  char recv_buf[DSC_TCP_RECV_BUF_SIZE];
   char line[256];
   const struct addrinfo hints = {
     .ai_family = AF_INET,
@@ -170,7 +170,7 @@ void dsc_tcp_task(void *pvParameters) {
       if (r > 0) {
         ESP_LOGD(TAG, "Read: %s", recv_buf);
         buf_idx += r;
-        if (buf_idx >= RECV_BUF_SIZE) {
+        if (buf_idx >= DSC_TCP_RECV_BUF_SIZE) {
           ESP_LOGE(TAG, "Receive buffer overflow!");
           buf_idx = 0;
         }
@@ -180,12 +180,12 @@ void dsc_tcp_task(void *pvParameters) {
           memcpy(line, pstr, pend-pstr);
           dsc_tcp_handle_msg(line);
           pstr = pend+1;
-          bzero(line, RECV_BUF_SIZE);
+          bzero(line, DSC_TCP_RECV_BUF_SIZE);
         }
         int rem = buf_idx-(pstr-recv_buf);
         if (pstr > recv_buf && pstr <= recv_buf+buf_idx) {
           memcpy(recv_buf, pstr, rem);
-          bzero(recv_buf+rem, RECV_BUF_SIZE-rem);
+          bzero(recv_buf+rem, DSC_TCP_RECV_BUF_SIZE-rem);
           buf_idx = rem;
         }
 
