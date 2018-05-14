@@ -46,13 +46,13 @@ void app_main()
     ESP_LOGI(TAG, "%dMB %s flash\n", spi_flash_get_chip_size() / (1024 * 1024),
             (chip_info.features & CHIP_FEATURE_EMB_FLASH) ? "embedded" : "external");
 
-    load_config();
+    load_config(true);
     initialize_console();
     ESP_LOGI(TAG, "Starting console task...");
     xTaskCreatePinnedToCore(&console_task, "console_task_pro_cpu", 8192, NULL, 0, NULL, 0); // App CPU, Priority 10
     keybus_init();
     ESP_LOGI(TAG, "Starting KeyBus handler task...");
-    xTaskCreatePinnedToCore(&keybus_handler_task, "keybus_task_app_cpu", 8192, NULL, 0, NULL, 0); // App CPU, Priority 10
+    xTaskCreatePinnedToCore(&keybus_handler_task, "keybus_task_app_cpu", 8192, NULL, 0, NULL, 1); // App CPU, Priority 10
     ESP_LOGI(TAG, "Starting WiFi...");
     start_wifi();
     ESP_LOGI(TAG, "Starting config task...");
@@ -67,5 +67,8 @@ void app_main()
       case SERVER_TCP:
         xTaskCreatePinnedToCore(&dsc_tcp_task, "dsc_tcp_task_pro_cpu", 8192, NULL, 0, NULL, 0);
         break;
+
+      default:
+        ESP_LOGW(TAG, "Uknown server type!");
     }
 }

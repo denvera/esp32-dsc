@@ -5,7 +5,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
 <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.1.1/css/bootstrap.min.css">
-
+<script src="/js/settings.js"></script>
 </head>
 <body>
 <div id="main" class="container">
@@ -23,8 +23,9 @@
 <div class="form-group">
   <label for="servertype">Server Address</label>
   <select class="form-control" id="servertype" name="servertype" value="%servertype%" placeholder="Server Address">
-    <option>TCP</option>
-    <option>MQTT</option>
+    <option id="servertype-Cloud">Cloud</option>
+    <option id="servertype-TCP">TCP</option>
+      <option id="servertype-MQTT">MQTT</option>
   </select>
 </div>
 

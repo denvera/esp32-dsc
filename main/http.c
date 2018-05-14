@@ -55,10 +55,12 @@ CgiStatus ICACHE_FLASH_ATTR tplIndex(HttpdConnData *connData, char *token, void 
     char buf[128];
     int len;
     int64_t uptime_us = esp_timer_get_time();
-    int hrs = (uptime_us / 1000 / 1000 / 3600);
+    int days = (uptime_us / 1000 / 1000 / 3600 / 24);
+    int hrs = (uptime_us / 1000 / 1000 / 3600) % 24;
     int min = (uptime_us / 1000 / 1000 /60) % 60;
     int s = (uptime_us / 1000 / 1000) % 60;
-    len = snprintf(buf, sizeof(buf), "%d hrs %d min %d s", hrs, min, s);
+    len = snprintf(buf, sizeof(buf), "%d day%s %d hr%s %d min %d s",
+          days, ((days != 1) ? "s" : ""), hrs, ((hrs != 1) ? "s" : ""),  min, s);
     httpdSend(connData, buf, len);
   } else if (strcmp(token, "version") == 0) {
     httpdSend(connData, VERSION, -1);
@@ -89,7 +91,9 @@ CgiStatus ICACHE_FLASH_ATTR tplSettings(HttpdConnData *connData, char *token, vo
     len = snprintf(s_port, sizeof(s_port), "%d", dsc_config.port);
     httpdSend(connData, s_port, len);
   } else if (strcmp(token, "servertype") == 0) {
-    const char *s_servertype = (dsc_config.server_type == SERVER_MQTT) ? "MQTT" : "TCP";
+    const char *servertypes[] = {"MQTT", "TCP", "Cloud"};
+    const char *s_servertype = servertypes[dsc_config.server_type];
+
     httpdSend(connData, s_servertype, strlen(s_servertype));
     }
   return HTTPD_CGI_DONE;
@@ -121,7 +125,7 @@ ESP_ERROR_CHECK(nvs_set_u16(nvs, "server_port", atoi(s_port)));
   }
   ESP_ERROR_CHECK(nvs_commit(nvs));
   nvs_close(nvs);
-
+  //load_config(false);
   httpdRedirect(connData, "/done.html");
   return HTTPD_CGI_DONE;
 }

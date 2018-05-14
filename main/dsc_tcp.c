@@ -128,6 +128,10 @@ void dsc_tcp_task(void *pvParameters) {
                            false, true, portMAX_DELAY);
     ESP_LOGI(TAG, "Connected to AP, trying to connect to DSC TCP server");
     int err = getaddrinfo(dsc_server, s_port, &hints, &res);
+    if (err) {
+      ESP_LOGE(TAG, "DNS lookup failed: %s", dsc_server);
+      continue;
+    }
     addr = &((struct sockaddr_in *)res->ai_addr)->sin_addr;
     ESP_LOGI(TAG, "DNS lookup succeeded. IP=%s", inet_ntoa(*addr));
     dsc_socket = socket(res->ai_family, res->ai_socktype, 0);

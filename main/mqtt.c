@@ -46,10 +46,12 @@ static esp_err_t mqtt_event_handler(esp_mqtt_event_handle_t event)
         case MQTT_EVENT_CONNECTED:
             ESP_LOGI(TAG, "MQTT_EVENT_CONNECTED");
             msg_id = esp_mqtt_client_subscribe(client, mqtt_write_queue, 0);
-            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d", msg_id);
+            ESP_LOGI(TAG, "sent subscribe successful, msg_id=%d topic: %s", msg_id, mqtt_write_queue);
+            mqtt_client = client;
             break;
         case MQTT_EVENT_DISCONNECTED:
             ESP_LOGW(TAG, "MQTT_EVENT_DISCONNECTED");
+            mqtt_client = NULL;
             break;
 
         case MQTT_EVENT_SUBSCRIBED:
@@ -79,14 +81,22 @@ esp_mqtt_client_handle_t mqtt_start(char * mqtt_uri)
 {
 
     uint8_t mac[6];
-    ESP_ERROR_CHECK(esp_base_mac_addr_get(mac));
+    esp_err_t e = esp_base_mac_addr_get(mac);
+    if (e != ESP_OK) {
+      ESP_LOGE(TAG, "Couldnt read base MAC: %s", esp_err_to_name(e));
+      e = esp_efuse_mac_get_default(mac);
+      if (e != ESP_OK) {
+        ESP_LOGE(TAG, "Couldnt default MAC: %s", esp_err_to_name(e));
+        return NULL;
+      }
+    }
     //struct keybus_queues kb;
     mqtt_queue_prefix = malloc(32);
     mqtt_write_queue  = malloc(32);
     mqtt_msg_queue    = malloc(32);
-    sprintf(mqtt_queue_prefix, "/bitfire/esp32-dsc/%x%x%x",       mac[3], mac[4], mac[5]);
-    sprintf(mqtt_write_queue,  "/bitfire/esp32-dsc/%x%x%x/write", mac[3], mac[4], mac[5]);
-    sprintf(mqtt_msg_queue,    "/bitfire/esp32-dsc/%x%x%x/msg",   mac[3], mac[4], mac[5]);
+    sprintf(mqtt_queue_prefix, "/bitfire/esp32-dsc/%02x%02x%02x",       mac[3], mac[4], mac[5]);
+    sprintf(mqtt_write_queue,  "/bitfire/esp32-dsc/%02x%02x%02x/write", mac[3], mac[4], mac[5]);
+    sprintf(mqtt_msg_queue,    "/bitfire/esp32-dsc/%02x%02x%02x/msg",   mac[3], mac[4], mac[5]);
     const esp_mqtt_client_config_t mqtt_cfg = {
         .uri = mqtt_uri,
         .event_handle = mqtt_event_handler,
@@ -94,6 +104,10 @@ esp_mqtt_client_handle_t mqtt_start(char * mqtt_uri)
 
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
     esp_mqtt_client_handle_t client = esp_mqtt_client_init(&mqtt_cfg);
+    if (!client) {
+      ESP_LOGE(TAG, "Failed to init MQTT client");
+      return NULL;
+    }
     esp_mqtt_client_start(client);
     return client;
 }

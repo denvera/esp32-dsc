@@ -22,9 +22,14 @@ static const char* TAG = "config";
 TaskHandle_t config_task_handle = NULL;
 configuration_t dsc_config;
 
-int load_config() {
+int load_config(bool initflash) {
   nvs_handle nvs_config;
-  esp_err_t e = nvs_flash_init();
+  esp_err_t e;
+  if (initflash)
+    e = nvs_flash_init();
+  else
+    e = ESP_OK;
+
   if (e == ESP_OK) e = nvs_open(NVS_CONFIG_NAMESPACE, NVS_READONLY, &nvs_config);
   if (e == ESP_OK) {
     size_t required_size = 0;
@@ -67,8 +72,16 @@ void config_task(void *pvParameter) {
   uint32_t ulNotifiedValue;
   ESP_LOGI(TAG, "Config task started");
   const esp_partition_t * f = NULL;
+  gpio_config_t io_conf = {
+    .intr_type = GPIO_INTR_DISABLE,
+    .mode = GPIO_MODE_INPUT,
+    .pin_bit_mask = (1 << USER_GPIO),
+    .pull_down_en = 0,
+    .pull_up_en = 0,
+  };
+  gpio_config(&io_conf);
   while (true) {
-    xTaskNotifyWait(0x00,ULONG_MAX,&ulNotifiedValue, pdMS_TO_TICKS(1000));
+    xTaskNotifyWait(0x00,ULONG_MAX,&ulNotifiedValue, (1000 / portTICK_RATE_MS));
     if ((ulNotifiedValue & RESET_FACTORY) != 0) {
       ESP_LOGW(TAG, "Factory reset");
       //const esp_partition_t * f = esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_APP_FACTORY, NULL);
@@ -79,6 +92,16 @@ void config_task(void *pvParameter) {
       } else {
         ESP_LOGE(TAG, "Couldnt find OTA partition!");
       }
+    }
+    if (gpio_get_level(USER_GPIO) ^ USER_GPIO_INVERTED) {
+      reset_button++;
+    } else {
+      if (reset_button > 3 && reset_button < 10) {
+        ESP_LOGW(TAG, "Boot to factory mode");
+      } else if (reset_button > 10) {
+        ESP_LOGW(TAG, "Factory reset triggered!");
+      }
+      reset_button = 0;
     }
   }
 }
