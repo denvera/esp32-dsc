@@ -32,6 +32,6 @@ extern TaskHandle_t config_task_handle;
 
 int load_config(bool initflash);
 void config_task(void *pvParameter);
-
+void erase_ota();
 
 #endif

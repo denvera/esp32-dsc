@@ -29,10 +29,11 @@
   </select>
 </div>
 
-<input type="submit" name="submit" value="Set">
+<input type="submit" name="submit" value="Save">
 </form>
 <form name="bootapp" action="/settings/reboot.cgi" method="post">
 <div class="form-group">
+<input type="submit" name="reboot" value="Reboot">
 <input type="submit" name="rebootfactory" value="Reboot to Factory">
 </div>
 </form>

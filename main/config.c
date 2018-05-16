@@ -11,9 +11,11 @@
 #include "rom/spi_flash.h"
 #include "rom/crc.h"
 #include "rom/rtc.h"
+#include "soc/cpu.h"
 #include "esp_partition.h"
 #include "nvs_flash.h"
 #include "esp_ota_ops.h"
+
 
 #include "dsc_tcp.h"
 #include "mqtt.h"
@@ -67,6 +69,17 @@ int load_config(bool initflash) {
   }
 }
 
+void erase_ota() {
+  const esp_partition_t * f = NULL;
+  f = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
+  if (f != NULL) {
+    esp_partition_erase_range(f, 0, f->size);
+    ESP_LOGW(TAG, "Erased OTA Partition");
+  } else {
+    ESP_LOGE(TAG, "Couldnt find OTA partition!");
+  }
+}
+
 void config_task(void *pvParameter) {
   uint8_t reset_button = 0;
   uint32_t ulNotifiedValue;
@@ -88,7 +101,9 @@ void config_task(void *pvParameter) {
       f = esp_partition_find_first(ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_OTA, NULL);
       if (f != NULL) {
         esp_partition_erase_range(f, 0, f->size);
+        ESP_LOGW(TAG, "Erased OTA Partition");
         esp_restart();
+        return;
       } else {
         ESP_LOGE(TAG, "Couldnt find OTA partition!");
       }

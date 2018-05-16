@@ -144,18 +144,26 @@ CgiStatus ICACHE_FLASH_ATTR cgiReboot(HttpdConnData *connData) {
     httpdEndHeaders(connData);
     return HTTPD_CGI_DONE;
   }
-
+  ESP_LOGI(TAG, "Post data: %s", connData->post.buff);
   len=httpdFindArg(connData->post.buff, "rebootfactory", buf, sizeof(buf));
-  if (len != 0) {
+  if (len > 0) {
     //if (strcmp(buf, "factory") == 0) {
       ESP_LOGW(TAG, "Factory Reboot");
-      xTaskNotify(config_task_handle, RESET_FACTORY, eSetValueWithOverwrite);
+      //xTaskNotify(config_task_handle, RESET_FACTORY, eSetValueWithOverwrite);
+      erase_ota();
       httpdRedirect(connData, "/done.html");
+      esp_restart();
+      return HTTPD_CGI_DONE;
     //}
-  } else {
-
-    httpdSend(connData, "Unknown reboot type", -1);
   }
+  len=httpdFindArg(connData->post.buff, "reboot", buf, sizeof(buf));
+  if (len > 0) {
+    ESP_LOGW(TAG, "Normal Reboot");
+    httpdRedirect(connData, "/done.html");
+    esp_restart();
+    return HTTPD_CGI_DONE;
+  }
+  httpdSend(connData, "Unknown reboot type", -1);
   return HTTPD_CGI_DONE;
 }
 
