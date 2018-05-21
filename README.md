@@ -21,5 +21,10 @@ Enter any of the following at the `esp32-dsc>` prompt (supports tab completion):
 - [x] Sniff peripheral messages
 - [x] Basic serial console
 - [x] Debug print to Serial
-- [ ] Connect to DSC server
+- [x] Connect to DSC server (TCP)
+- [x] MQTT support for reading and writing
 - [ ] Configuration via either Espressif Smartconfig, BT or AP captive portal
+
+
+#### Compilation / SDK notes
+It appears a change was made recently to how select works ([3c457afca5561a04a84ced04b94f947801fe8bf0](https://github.com/espressif/esp-idf/commit/3c457afca5561a04a84ced04b94f947801fe8bf0)), so components might need their `select` calls changed to `lwip_select`'s. Ths change to ESP-IDF seems to ensure that only one task can call `select` at a time which can lead to strange problems and deadlocks when using multiple components or tasks that try to `select` simultaneously.

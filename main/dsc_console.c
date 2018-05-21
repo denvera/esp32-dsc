@@ -17,7 +17,7 @@ static void register_reset();
 static void register_version();
 
 static int monitor_mode(int argc, char** argv);
-static int write(int argc, char** argv);
+static int keybus_write(int argc, char** argv);
 static int reset(int argc, char** argv);
 static int version(int argc, char** argv);
 
@@ -76,12 +76,12 @@ static void register_write() {
         .command = "write",
         .help = "Write to KeyBus",
         .hint = NULL,
-        .func = &write,
+        .func = &keybus_write,
     };
     ESP_ERROR_CHECK( esp_console_cmd_register(&cmd) );
 }
 
-static int write(int argc, char** argv)
+static int keybus_write(int argc, char** argv)
 {
   int k;
   char c;
