@@ -109,3 +109,15 @@ int keybus_handler_check_crc(char *msg, char len) {
         return crc & 0xff;
   }
 }
+
+char keybus_add_crc(char c) {
+  switch (c) {
+    case '*':
+      c = 0x0a;
+      break;
+    case '#':
+      c = 0x0b;
+      break;
+  }
+  return ((c << 2) | ((((c >> 4) & 0x03) + ((c >> 2) & 0x03) + (c & 0x03)) & 0x03));
+}

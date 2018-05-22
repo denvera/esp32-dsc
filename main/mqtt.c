@@ -1,12 +1,13 @@
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <stddef.h>
 #include <string.h>
+#include <ctype.h>
 #include "esp_wifi.h"
 #include "esp_system.h"
 #include "nvs_flash.h"
 #include "esp_event_loop.h"
-
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -82,6 +83,22 @@ void handle_queue_message(char *topic, int topic_len, char *data, int data_len) 
     if (cJSON_IsString(write_json) && (write_json->valuestring != NULL)) {
       ESP_LOGW(TAG, "Received write string: %s, but writing strings not supported yet",
         write_json->valuestring);
+        int i = 0;
+        int k;
+        while(write_json->valuestring[i] != '\0') {
+          if (isspace((unsigned char)write_json->valuestring[i])) {
+            i++;
+            continue;
+          }
+          if (write_json->valuestring[i] >= 48 && write_json->valuestring[i] <= 57) {
+    				k = keybus_add_crc(write_json->valuestring[i]-48);
+          } else {
+            k = keybus_add_crc(write_json->valuestring[i]);
+          }
+          ESP_LOGI(TAG, "Write %c [%x] to KeyBus\n", write_json->valuestring[i], k);
+          xQueueSend(write_queue, &k, NULL);
+          i++;
+        }
     } else if (cJSON_IsArray(write_json)) {
       cJSON_ArrayForEach(write_element, write_json) {
         if (cJSON_IsNumber(write_element)) {
