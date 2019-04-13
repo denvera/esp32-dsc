@@ -56,6 +56,7 @@ int load_config(bool initflash) {
     dsc_config.dispatch_msg = (server_type == SERVER_MQTT) ? mqtt_dispatch_msg : dsc_tcp_dispatch_msg;
     ESP_LOGI(TAG, "Config loaded:");
     ESP_LOGI(TAG, "Server: %s, Server Type: %d, Server Port: %d", dscserver, server_type, port);
+    nvs_close(nvs_config);
     return ESP_OK;
   } else {
     dsc_config = (configuration_t) {
@@ -67,6 +68,22 @@ int load_config(bool initflash) {
     ESP_LOGE(TAG, "Couldn't find config namespace, using hardcoded defaults: %s", esp_err_to_name(e));
     return -1;
   }
+}
+int erase_config() {
+  nvs_handle nvs_config;
+  esp_err_t e;
+  ESP_LOGW(TAG, "Erasing all settings!")  ;
+  if ((e = nvs_open(NVS_CONFIG_NAMESPACE, NVS_READWRITE, &nvs_config)) == ESP_OK) {
+    e = nvs_erase_all(nvs_config);
+    if (e != ESP_OK) {
+      ESP_LOGE(TAG, "Error erasing NVS: %s", esp_err_to_name(e));
+    }
+    nvs_close(nvs_config);
+  } else {
+    ESP_LOGE(TAG, "Error opening NVS: %s", esp_err_to_name(e));
+    return -1;
+  }
+  return 0;
 }
 
 void erase_ota() {
@@ -113,8 +130,11 @@ void config_task(void *pvParameter) {
     } else {
       if (reset_button > 3 && reset_button < 10) {
         ESP_LOGW(TAG, "Boot to factory mode");
+        erase_ota();
+        esp_restart();
       } else if (reset_button > 10) {
         ESP_LOGW(TAG, "Factory reset triggered!");
+        erase_config();
       }
       reset_button = 0;
     }

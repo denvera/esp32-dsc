@@ -17,11 +17,11 @@
   <input type="text" class="form-control" id="dscserver" name="dscserver" value="%dscserver%" placeholder="Server Address"> <br />
 </div>
 <div class="form-group">
-  <label for="port">Server Address</label>
+  <label for="port">Port Number</label>
   <input type="text" class="form-control" id="port" name="port" value="%port%" placeholder="Port Number"> <br />
 </div>
 <div class="form-group">
-  <label for="servertype">Server Address</label>
+  <label for="servertype">Server Type</label>
   <select class="form-control" id="servertype" name="servertype" value="%servertype%" placeholder="Server Address">
     <option id="servertype-Cloud">Cloud</option>
     <option id="servertype-TCP">TCP</option>

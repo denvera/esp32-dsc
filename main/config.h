@@ -3,7 +3,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "keybus_handler.h"
-#define VERSION "1.0.4"
+#define VERSION "1.0.5"
 
 #define USER_GPIO GPIO_NUM_0
 #define USER_GPIO_INVERTED 1
